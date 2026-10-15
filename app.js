@@ -150,6 +150,8 @@ async function loadGroupData() {
   const gid = state.group.id;
   const from = today();
   const to = addDays(from, 34);
+  // 날짜가 지나 8~14일 창에 들어온 시간도 방이 생기도록 다시 확인
+  await sb.rpc('recheck_rooms', { p_group: gid }).then(({ error }) => { if (error) console.warn(error); });
   const [g, mem, rooms, mine, counts, prog] = await Promise.all([
     sb.from('groups').select('*').eq('id', gid).single(),
     sb.from('members').select('id,name,color,user_id').eq('group_id', gid).order('created_at'),
