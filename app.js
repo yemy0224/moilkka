@@ -245,7 +245,7 @@ function viewWelcome() {
       ${appIcon(92)}
       <div class="stack-sm">
         <h1 class="title-lg">49th</h1>
-        <p class="sub" style="font-size:17px;white-space:pre-line">되는 날만 칠해두면
+        <p class="sub" style="font-size:15px;white-space:pre-line">되는 날만 칠해두면
 약속은 알아서 잡혀요</p>
       </div>
     </div>
@@ -292,8 +292,8 @@ function codeResult() {
   if (state.onb.codeError) return `<p class="err">${esc(state.onb.codeError)}</p>`;
   if (!p) return '';
   return `<div class="card pad row" style="gap:12px">
-      <span class="avatar" style="width:44px;height:44px;border-radius:12px;background:#1C1C1E;color:#fff;font-size:14px;font-weight:700">49th</span>
-      <span class="grow stack-sm"><b>${esc(p.name)}</b><span class="meta" style="font-size:13px;color:var(--quiet)">${esc(p.owner_name || '')}님이 만든 그룹 · ${p.member_count}명 참여 중</span></span>
+      <span class="avatar" style="width:44px;height:44px;border-radius:12px;background:#1C1C1E;color:#fff;font-size:13px;font-weight:700">49th</span>
+      <span class="grow stack-sm"><b>${esc(p.name)}</b><span class="meta" style="font-size:12px;color:var(--quiet)">${esc(p.owner_name || '')}님이 만든 그룹 · ${p.member_count}명 참여 중</span></span>
       ${ic.check}
     </div>`;
 }
@@ -453,10 +453,10 @@ function inviteCard(room) {
   return `<div class="invite">
     <div class="row" style="gap:12px;align-items:flex-start">
       <span class="badge-icon" style="background:var(--warn)">${ic.mail}</span>
-      <span class="grow stack-sm"><b style="font-size:17px;font-weight:600">${esc(roomTitle(room))}</b><span style="font-size:13px;color:var(--quiet)">${why}</span></span>
+      <span class="grow stack-sm"><b style="font-size:15px;font-weight:600">${esc(roomTitle(room))}</b><span style="font-size:12px;color:var(--quiet)">${why}</span></span>
     </div>
     <div class="stack-sm">
-      <div class="row" style="justify-content:space-between;font-size:13px"><b style="font-weight:600">${room.kind === 'auto' ? `${need}명 참석하면 확정` : '초대받은 사람이 모두 참석하면 확정'}</b><span style="color:var(--quiet)">지금 ${joined}명 · ${deadlineText(room.reply_deadline)}</span></div>
+      <div class="row" style="justify-content:space-between;font-size:12px"><b style="font-weight:600">${room.kind === 'auto' ? `${need}명 참석하면 확정` : '초대받은 사람이 모두 참석하면 확정'}</b><span style="color:var(--quiet)">지금 ${joined}명 · ${deadlineText(room.reply_deadline)}</span></div>
       <div class="progress" style="grid-template-columns:repeat(${need},minmax(0,1fr))">${bars}</div>
     </div>
     <div class="row">
@@ -503,15 +503,15 @@ function viewHome() {
 
     ${fresh ? `
     <section class="stack">
-      <div class="stack-sm" style="padding:0 4px"><h2 class="title-sm">친구들이 모이는 중</h2><span class="sub" style="font-size:13px">${prog.length}명 참여 · ${painted}명이 칠했어요</span></div>
+      <div class="stack-sm" style="padding:0 4px"><h2 class="title-sm">친구들이 모이는 중</h2><span class="sub" style="font-size:12px">${prog.length}명 참여 · ${painted}명이 칠했어요</span></div>
       <div class="card">
         ${prog.map((p) => `<div class="list-row">${avatar(p.name, p.color, 30)}<span class="grow">${esc(p.name)}${p.is_me ? ' (나)' : ''}${p.is_owner ? ' · 방장' : ''}</span><span class="pill ${p.painted ? 'green' : 'orange'}">${p.painted ? '칠함' : '아직 안 칠함'}</span></div>`).join('')}
-        <div class="list-row"><span class="grow sub" style="font-size:15px">초대 번호 <b style="color:var(--ink);letter-spacing:2px">${esc(state.group.code)}</b></span><button class="pill blue" style="border:none;font-size:14px;padding:8px 14px" data-act="shareCode">공유</button></div>
+        <div class="list-row"><span class="grow sub" style="font-size:14px">초대 번호 <b style="color:var(--ink);letter-spacing:2px">${esc(state.group.code)}</b></span><button class="pill blue" style="border:none;font-size:13px;padding:8px 14px" data-act="shareCode">공유</button></div>
       </div>
     </section>
     <div class="card pad row" style="gap:14px;align-items:flex-start">
       <span class="badge-icon" style="background:var(--warn)">${ic.mail}</span>
-      <span class="grow stack-sm"><b style="font-weight:600">아직 초대장이 없어요</b><span class="sub" style="font-size:14px">8~14일 뒤 같은 시간대를 ${state.group.threshold}명 이상 칠하면 여기로 초대장이 와요.</span></span>
+      <span class="grow stack-sm"><b style="font-weight:600">아직 초대장이 없어요</b><span class="sub" style="font-size:13px">8~14일 뒤 같은 시간대를 ${state.group.threshold}명 이상 칠하면 여기로 초대장이 와요.</span></span>
     </div>` : ''}
 
     ${invites.length ? `<section class="stack"><h2 class="title-sm" style="padding:0 4px">초대장</h2>${invites.map(inviteCard).join('')}</section>` : ''}
@@ -567,7 +567,7 @@ function viewRoom() {
     </div>
     <div class="stack-sm" style="padding:0 4px">
       <h1 class="title-md">${esc(room.title || roomTitle(room))}</h1>
-      <span class="sub" style="font-size:14px">${room.title ? esc(roomTitle(room)) + ' · ' : ''}${room.time_label ? esc(room.time_label) + ' · ' : ''}${dd === 0 ? '오늘' : `D-${dd}`} · ${room.status === 'confirmed' ? '확정' : `확정까지 ${needCount(room) - joined.length}명`}</span>
+      <span class="sub" style="font-size:13px">${room.title ? esc(roomTitle(room)) + ' · ' : ''}${room.time_label ? esc(room.time_label) + ' · ' : ''}${dd === 0 ? '오늘' : `D-${dd}`} · ${room.status === 'confirmed' ? '확정' : `확정까지 ${needCount(room) - joined.length}명`}</span>
     </div>
     <div class="card">
       <div class="list-row"><span class="grow main">참석 ${joined.length}명</span><div class="avatars">${joined.map((m) => avatar(m.name, m.color, 28)).join('')}</div></div>
@@ -592,7 +592,7 @@ function viewNewRoom() {
     <div class="topbar"><button class="back" data-act="toHome">취소</button><b>새 방</b><span style="width:40px"></span></div>
     <div class="field"><label for="roomTitle">방 이름</label><input class="input" id="roomTitle" maxlength="30" placeholder="예: 전시 보러 가기" value="${esc(n.title)}"></div>
     <div class="field"><span class="label">초대할 친구</span>
-      <div class="card">${friends.length ? friends.map((f) => `<button class="list-row" role="checkbox" aria-checked="${n.invitees.has(f.id)}" data-act="toggleInvitee" data-id="${f.id}">${avatar(f.name, f.color, 30)}<span class="grow">${esc(f.name)}</span><span class="avatar" style="width:24px;height:24px;${n.invitees.has(f.id) ? 'background:var(--accent);color:#fff' : 'border:1.5px solid #C7C7CC'};font-size:13px">${n.invitees.has(f.id) ? '✓' : ''}</span></button>`).join('') : '<div class="empty">아직 들어온 친구가 없어요</div>'}</div>
+      <div class="card">${friends.length ? friends.map((f) => `<button class="list-row" role="checkbox" aria-checked="${n.invitees.has(f.id)}" data-act="toggleInvitee" data-id="${f.id}">${avatar(f.name, f.color, 30)}<span class="grow">${esc(f.name)}</span><span class="avatar" style="width:24px;height:24px;${n.invitees.has(f.id) ? 'background:var(--accent);color:#fff' : 'border:1.5px solid #C7C7CC'};font-size:12px">${n.invitees.has(f.id) ? '✓' : ''}</span></button>`).join('') : '<div class="empty">아직 들어온 친구가 없어요</div>'}</div>
     </div>
     <div class="field"><label for="roomDay">날짜</label><input class="input" type="date" id="roomDay" min="${today()}" value="${esc(n.day)}"></div>
     <div class="field"><span class="label">시간</span>
@@ -617,11 +617,11 @@ function viewSettings() {
   return `
   <main class="screen" style="gap:18px">
     <h1 class="title-lg" style="padding:0 4px">설정</h1>
-    <button class="card list-row" data-act="editProfile">${avatar(state.me.name, state.me.color, 56)}<span class="grow stack-sm"><span class="main" style="font-size:19px">${esc(state.me.name)}</span><span class="meta">프로필 사진 색, 이름</span></span>${ic.chev}</button>
+    <button class="card list-row" data-act="editProfile">${avatar(state.me.name, state.me.color, 56)}<span class="grow stack-sm"><span class="main" style="font-size:17px">${esc(state.me.name)}</span><span class="meta">프로필 사진 색, 이름</span></span>${ic.chev}</button>
     <div class="stack-sm">
       <span class="note">${esc(state.group.name)} · ${state.members.length}명</span>
       <div class="card">
-        <div class="list-row"><span class="grow">초대 번호</span><b style="letter-spacing:2px">${esc(state.group.code)}</b><button class="pill blue" style="border:none;font-size:13px;padding:6px 12px" data-act="shareCode">공유</button></div>
+        <div class="list-row"><span class="grow">초대 번호</span><b style="letter-spacing:2px">${esc(state.group.code)}</b><button class="pill blue" style="border:none;font-size:12px;padding:6px 12px" data-act="shareCode">공유</button></div>
         <div class="list-row"><span class="grow">방이 생기는 기준</span><span class="sub">${state.group.threshold}명 이상</span>
           ${owner ? `<div class="stepper"><button data-act="setThreshold" data-d="-1" aria-label="한 명 줄이기">−</button><span></span><button data-act="setThreshold" data-d="1" aria-label="한 명 늘리기">+</button></div>` : ic.lock}
         </div>
