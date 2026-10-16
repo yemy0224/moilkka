@@ -375,7 +375,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 const memberById = (id) => state.members.find((m) => m.id === id);
 const myStatus = (room) => room.room_members.find((r) => r.member_id === state.me.id)?.status;
 const joinedCount = (room) => room.room_members.filter((r) => r.status === 'joined').length;
-const needCount = (room) => (room.kind === 'auto' ? state.group.threshold : room.room_members.length);
+const needCount = (room) => (room.kind === 'auto' ? state.group.threshold : room.room_members.filter((x) => x.status !== 'passed').length);
 const roomTitle = (room) => `${longDate(room.day)} ${SLOT[room.slot]}`;
 const placeById = (id) => state.places.find((p) => p.id === id);
 const voteDeadlineText = (day) => { const { m, d } = md(addDays(day, -3)); return `${m}월 ${d}일 밤 9시`; };
@@ -395,7 +395,7 @@ const thumb = (p, size = 48) => {
   const icon = Math.round(size * 0.5);
   return `<span class="avatar" style="width:${size}px;height:${size}px;border-radius:${Math.round(size * 0.28)}px;background:${k.bg};color:${k.fg}"><svg width="${icon}" height="${icon}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${k.svg}</svg></span>`;
 };
-const liveRooms = () => state.rooms.filter((r) => !(r.status === 'open' && new Date(r.reply_deadline) < new Date()));
+const liveRooms = () => state.rooms.filter((r) => !(r.kind === 'auto' && r.status === 'open' && new Date(r.reply_deadline) < new Date()));
 
 // ─────────────────────────────────────────────
 // 화면: 설치 안내
@@ -759,7 +759,7 @@ function inviteCard(room) {
     <div class="stack-sm">
       <div class="row" style="justify-content:space-between;font-size:12px"><b style="font-weight:600">${room.kind === 'auto' ? `${need}명 모이면 확정` : '모두 참석하면 확정'}</b><span style="color:var(--quiet)">지금 ${joined}명</span></div>
       <div class="progress" style="grid-template-columns:repeat(${need},minmax(0,1fr))">${bars}</div>
-      <span style="font-size:11.5px;color:var(--quiet)">${deadlineText(room.reply_deadline).replace(' 마감', '')}까지 답해주세요</span>
+      <span style="font-size:11.5px;color:var(--quiet)">${new Date(room.reply_deadline) < new Date() ? '응답 마감이 지났지만 지금 참석해도 돼요' : `${deadlineText(room.reply_deadline).replace(' 마감', '')}까지 답해주세요`}</span>
     </div>
     <div class="row">
       <button class="btn primary small" data-act="respond" data-room="${room.id}" data-status="joined">참석</button>
@@ -886,7 +886,7 @@ function viewRoom() {
       <button class="back" data-act="toHome">${ic.back}홈</button>
       <div class="row">
         <button class="icon-btn" style="color:var(--accent)" aria-label="단톡방에 공유" data-act="shareRoom" data-room="${room.id}">${ic.share}</button>
-        ${st !== 'passed' && (room.status === 'open' || (room.kind === 'manual' && room.created_by === state.me.id)) ? `<button class="icon-btn" aria-label="방 없애기" data-act="deleteRoom" data-room="${room.id}">${ic.x}</button>` : ''}
+        ${st !== 'passed' && (room.status === 'open' || (room.kind === 'manual' && (room.created_by === state.me.id || !memberById(room.created_by)))) ? `<button class="icon-btn" aria-label="방 없애기" data-act="deleteRoom" data-room="${room.id}">${ic.x}</button>` : ''}
       </div>
     </div>
     <div class="stack-sm" style="padding:0 4px">
@@ -896,7 +896,9 @@ function viewRoom() {
     <div class="card">
       <div class="list-row"><span class="grow main">참석 ${joined.length}명</span><div class="avatars">${joined.map((m) => avatar(m.name, m.color, 28)).join('')}</div></div>
       ${waiting.length ? `<div class="list-row"><span class="grow meta">아직 답 안 한 사람 ${waiting.length}명</span></div>` : ''}
-      ${room.status === 'open' ? `<div class="list-row"><span class="grow meta">${deadlineText(room.reply_deadline).replace(' 마감', '')}까지 안 모이면 사라져요</span></div>` : ''}
+      ${room.status === 'open' ? `<div class="list-row"><span class="grow meta">${room.kind === 'auto'
+        ? `${deadlineText(room.reply_deadline).replace(' 마감', '')}까지 안 모이면 사라져요`
+        : new Date(room.reply_deadline) < new Date() ? '참석이 2명 되면 확정돼요' : `${deadlineText(room.reply_deadline).replace(' 마감', '')}에 참석한 사람끼리 확정돼요`}</span></div>` : ''}
     </div>
     ${room.status === 'confirmed' && st === 'joined' ? roomVoteSections(room) : `<p class="note">${room.status === 'confirmed' ? '참석하면 시간과 식당을 같이 정해요' : '확정되면 시간과 식당을 정해요'}</p>`}
     ${st === 'joined' ? `<button class="link-btn quiet-danger" data-act="leaveRoom" data-room="${room.id}">참석 취소</button>` : ''}
@@ -1080,7 +1082,7 @@ function viewNewRoom() {
       </div>
     </div>
     ${newRoomHint(n)}
-    <p class="note">초대한 친구만 이 방을 볼 수 있고, 모두 참석하면 확정돼요</p>
+    <p class="note">초대한 친구만 볼 수 있어요. 모두 참석하면 확정되고(패스한 사람은 빼고), 마감 때는 참석한 사람끼리 확정돼요. 직접 없애기 전엔 사라지지 않아요</p>
   </main>
   <div class="bottom-bar"><div class="inner">
     <button class="btn primary" data-act="createRoom" ${count && n.day ? '' : 'disabled'}>${count ? `${count}명에게 초대 보내기` : '친구를 골라주세요'}</button>
@@ -1411,7 +1413,7 @@ const actions = {
     let msg = '';
     if (room?.status === 'confirmed') {
       const joined = (room.room_members || []).filter((x) => x.status === 'joined').length - 1;
-      const need = room.kind === 'auto' ? state.group.threshold : 2;
+      const need = room.kind === 'auto' ? state.group.threshold : 0;
       msg = joined >= need
         ? `남은 ${joined}명의 모임은 그대로 진행돼요.`
         : `남는 사람이 ${need}명보다 적어서 모임이 없어져요.`;
