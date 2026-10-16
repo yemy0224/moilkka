@@ -1,6 +1,6 @@
 // 앱 화면 파일을 저장해두는 서비스 워커 (설치형 앱에 필요)
 // 화면 파일을 바꿨으면 아래 버전 숫자를 올려주세요.
-const CACHE = '49th-v7';
+const CACHE = '49th-v8';
 const SHELL = ['/', '/index.html', '/styles.css', '/app.js', '/config.js', '/manifest.webmanifest', '/icons/icon-192.png'];
 
 self.addEventListener('install', (event) => {
@@ -38,7 +38,7 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(d.title || '49th', {
       body: d.body || '',
       icon: '/icons/icon-192.png',
-      badge: '/icons/icon-192.png',
+      badge: '/icons/badge-96.png',
       data: { url: d.url || '/' },
     })
   );
