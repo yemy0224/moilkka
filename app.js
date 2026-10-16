@@ -501,8 +501,7 @@ function calendar(compact = false) {
     const tag = compact ? 'div' : 'button';
     cells += `<${tag} class="cal-cell ${inWin && !compact ? 'window' : ''} ${past ? 'past' : ''}" ${past && !compact ? 'disabled' : ''} ${compact ? '' : `data-act="paint" data-day="${day}"`}
       aria-label="${m}월 ${dd}일 ${compact ? '' : SLOT[state.brush]} ${compact ? [l ? '점심' : '', d ? '저녁' : ''].filter(Boolean).join('·') || '' : state.mine.has(`${day}|${state.brush}`) ? '칠함' : '안 칠함'}">
-      ${dd === 1 ? `<span class="month">${m}월</span>` : ''}
-      <span class="num ${dow(day) === 0 ? 'sun' : ''}">${dd}</span>
+      <span class="num ${dow(day) === 0 ? 'sun' : ''}">${dd === 1 ? `<span class="month">${m}월</span>` : ''}${dd}</span>
       <span class="capsule"><span class="${l ? 'l' : ''}"></span><span class="${d ? 'd' : ''}"></span></span>
       ${compact ? '' : `<span class="others">${'<i></i>'.repeat(Math.min(others, 6))}</span>`}
       ${room ? '<span class="room-dot"></span>' : ''}
