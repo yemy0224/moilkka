@@ -84,6 +84,7 @@ const ic = {
   tick: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
   checkSm: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
   bolt: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/></svg>',
+  more: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/></svg>',
   pen: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 7l3 3"/></svg>',
   check: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#248A3D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/></svg>',
 };
@@ -102,6 +103,28 @@ function toast(msg) {
   t.textContent = msg;
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 2600);
+}
+
+// 앱 스타일 확인 창 (브라우저 기본 창 대신)
+function ask(title, body = '', { ok = '확인', cancel = '취소', danger = false } = {}) {
+  return new Promise((resolve) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'ask-wrap';
+    wrap.innerHTML = `
+      <div class="ask-back"></div>
+      <div class="ask" role="alertdialog" aria-modal="true" aria-labelledby="askTitle">
+        <div class="ask-text"><b id="askTitle">${esc(title)}</b>${body ? `<p>${esc(body)}</p>` : ''}</div>
+        <button class="btn ${danger ? 'danger-solid' : 'primary'}" data-ok>${esc(ok)}</button>
+        <button class="btn white" data-cancel>${esc(cancel)}</button>
+      </div>`;
+    const done = (v) => { wrap.classList.add('out'); setTimeout(() => wrap.remove(), 160); resolve(v); };
+    wrap.querySelector('[data-ok]').onclick = () => done(true);
+    wrap.querySelector('[data-cancel]').onclick = () => done(false);
+    wrap.querySelector('.ask-back').onclick = () => done(false);
+    document.body.appendChild(wrap);
+    requestAnimationFrame(() => wrap.classList.add('in'));
+    wrap.querySelector('[data-cancel]').focus();
+  });
 }
 
 function errText(e) {
@@ -315,7 +338,24 @@ const roomTitle = (room) => `${longDate(room.day)} ${SLOT[room.slot]}`;
 const placeById = (id) => state.places.find((p) => p.id === id);
 const voteDeadlineText = (day) => { const { m, d } = md(addDays(day, -3)); return `${m}월 ${d}일 밤 9시`; };
 const placeMeta = (p) => [p.category, p.area].filter(Boolean).map(esc).join(' · ');
-const thumb = (p, size = 48) => { const hues = ['#E0A96D', '#D77A6A', '#7FA88E', '#9DB2C9', '#B9A27E', '#C49BBB']; const h = hues[(p.name || '').length % hues.length]; return `<span class="avatar" style="width:${size}px;height:${size}px;border-radius:${Math.round(size * 0.24)}px;background:${h};color:#fff">${ic.fork}</span>`; };
+// 맛집 아이콘: 종류(없으면 이름)에서 음식 종류를 짐작해요
+const FOOD_KINDS = [
+  { re: /카페|커피|디저트|베이커리|빵|케이크|도넛|아이스크림|티룸/, bg: '#F2ECE6', fg: '#7A5537', svg: '<path d="M5 9h11v5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5z"/><path d="M16 10h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M9 3.5c0 1.5 1 1.5 1 3M12.5 3.5c0 1.5 1 1.5 1 3"/>' },
+  { re: /술|바$|바 |와인|맥주|포차|펍|이자카야|칵테일|하이볼|막걸리/, bg: '#EFEAFB', fg: '#6A4BB8', svg: '<path d="M7 3h10l-1 7a4 4 0 0 1-8 0z"/><path d="M12 14v6M8.5 20h7"/>' },
+  { re: /고기|삼겹|갈비|곱창|막창|구이|바베큐|BBQ|스테이크|한우|양꼬치|족발|보쌈|닭갈비/i, bg: '#FDE8E6', fg: '#C53B2C', svg: '<path d="M12 21c-3.9 0-6.5-2.6-6.5-6 0-3.5 3-5.5 3.5-9 2 1.5 3 3 3.2 5 .8-.8 1.3-1.8 1.4-3 2.4 2 4.4 4.3 4.4 7 0 3.4-2.6 6-6 6z"/>' },
+  { re: /일식|스시|초밥|라멘|우동|소바|오마카세|돈카츠|돈까스|규동|덮밥|사시미|회/, bg: '#E3F3F4', fg: '#1D7A80', svg: '<path d="M3 12c3-4.5 9-5.5 13-2l4-3v10l-4-3c-4 3.5-10 2.5-13-2z"/><circle cx="8" cy="11.2" r="0.9" fill="currentColor"/>' },
+  { re: /중식|중국|마라|딤섬|짜장|짬뽕|훠궈|양장피|탕수육/, bg: '#FFF4D6', fg: '#9A6200', svg: '<path d="M4 12h16a8 8 0 0 1-16 0z"/><path d="M14 3l-4 8M18.5 4l-5 7"/>' },
+  { re: /양식|이탈리|파스타|피자|프렌치|브런치|버거|햄버거|비스트로|리조또/, bg: '#E8F3EA', fg: '#2F7A45', svg: '<path d="M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10M17 3c-2 0-3 2-3 5s1 4 3 4v9"/>' },
+  { re: /태국|베트남|쌀국수|인도|커리|카레|멕시|타코|아시안|분짜|팟타이/, bg: '#EAF5DD', fg: '#55791C', svg: '<path d="M4 12h16a8 8 0 0 1-16 0z"/><path d="M8 8c1-1.5 3-1.5 4 0s3 1.5 4 0"/>' },
+  { re: /한식|국밥|찌개|백반|분식|떡볶이|김밥|냉면|칼국수|국수|순대|보리밥|한정식|곰탕|해장/, bg: '#FFF1E3', fg: '#C2610C', svg: '<path d="M4 11h16a8 8 0 0 1-16 0z"/><path d="M9 7.5c0-1.5 1-1.5 1-3M13 7.5c0-1.5 1-1.5 1-3"/>' },
+];
+const foodKind = (p) => FOOD_KINDS.find((k) => k.re.test(p.category || '')) || FOOD_KINDS.find((k) => k.re.test(p.name || ''))
+  || { bg: '#EEF1F5', fg: '#5A6B80', svg: '<path d="M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10M17 3c-2 0-3 2-3 5s1 4 3 4v9"/>' };
+const thumb = (p, size = 48) => {
+  const k = foodKind(p);
+  const icon = Math.round(size * 0.5);
+  return `<span class="avatar" style="width:${size}px;height:${size}px;border-radius:${Math.round(size * 0.28)}px;background:${k.bg};color:${k.fg}"><svg width="${icon}" height="${icon}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${k.svg}</svg></span>`;
+};
 const liveRooms = () => state.rooms.filter((r) => !(r.status === 'open' && new Date(r.reply_deadline) < new Date()));
 
 // ─────────────────────────────────────────────
@@ -496,15 +536,17 @@ function calendar(compact = false) {
     const inWin = day >= winFrom && day <= winTo;
     const l = state.mine.has(`${day}|L`);
     const d = state.mine.has(`${day}|D`);
-    const others = state.counts[`${day}|${state.brush}`] || 0;
+    const oL = state.counts[`${day}|L`] || 0;
+    const oD = state.counts[`${day}|D`] || 0;
+    const sel = !compact && state.selDay === day;
     const room = state.rooms.some((r) => r.kind === 'auto' && r.day === day);
     const { m, d: dd } = md(day);
     const tag = compact ? 'div' : 'button';
-    cells += `<${tag} class="cal-cell ${inWin && !compact ? 'window' : ''} ${past ? 'past' : ''}" ${past && !compact ? 'disabled' : ''} ${compact ? '' : `data-act="paint" data-day="${day}"`}
-      aria-label="${m}월 ${dd}일 ${compact ? '' : SLOT[state.brush]} ${compact ? [l ? '점심' : '', d ? '저녁' : ''].filter(Boolean).join('·') || '' : state.mine.has(`${day}|${state.brush}`) ? '칠함' : '안 칠함'}">
+    cells += `<${tag} class="cal-cell ${inWin && !compact ? 'window' : ''} ${past ? 'past' : ''} ${sel ? 'sel' : ''}" ${past && !compact ? 'disabled' : ''} ${compact ? '' : `data-act="pickDay" data-day="${day}" aria-pressed="${sel}"`}
+      aria-label="${m}월 ${dd}일, ${[l ? '점심' : '', d ? '저녁' : ''].filter(Boolean).join('·') || '안 칠함'}${compact ? '' : `, 점심 친구 ${oL}명 저녁 친구 ${oD}명`}">
       <span class="num ${dow(day) === 0 ? 'sun' : ''}">${dd === 1 ? `<span class="month">${m}월</span>` : ''}${dd}</span>
       <span class="capsule"><span class="${l ? 'l' : ''}"></span><span class="${d ? 'd' : ''}"></span></span>
-      ${compact ? '' : `<span class="others">${'<i></i>'.repeat(Math.min(others, 6))}</span>`}
+      ${compact ? '' : `<span class="others"><span>${'<i class="ol"></i>'.repeat(Math.min(oL, 3))}</span><span>${'<i class="od"></i>'.repeat(Math.min(oD, 3))}</span></span>`}
       ${room ? '<span class="room-dot"></span>' : ''}
     </${tag}>`;
   }
@@ -514,15 +556,9 @@ function calendar(compact = false) {
     ${compact ? '' : `<div class="legend">
       <span><i class="dot" style="background:var(--lunch)"></i>점심</span>
       <span><i class="dot" style="background:var(--dinner)"></i>저녁</span>
-      <span><i class="dot" style="background:#AEAEB2;width:6px;height:6px"></i>${SLOT[state.brush]}에 되는 친구</span>
+      <span><i class="dot" style="background:#9FB4CC;width:5px;height:5px"></i>되는 친구</span>
       <span><i class="dot" style="background:#F5F9FF;border:1px solid #D6E6F7"></i>방이 생길 수 있는 날</span>
     </div>`}
-  </div>`;
-}
-function brushSeg() {
-  return `<div class="seg" role="group" aria-label="칠할 시간대">
-    <button data-act="brush" data-slot="L" aria-pressed="${state.brush === 'L'}"><i class="dot" style="background:var(--lunch)"></i>점심</button>
-    <button data-act="brush" data-slot="D" aria-pressed="${state.brush === 'D'}"><i class="dot" style="background:var(--dinner)"></i>저녁</button>
   </div>`;
 }
 
@@ -544,7 +580,33 @@ function quickTargets(kind) {
 const futureMine = () => [...state.mine].filter((k) => k.slice(0, 10) >= today()).length;
 
 function paintTools() {
-  return `<div class="paint-tools">${brushSeg()}<button class="quick-btn" data-act="quickOpen">${ic.bolt}빠르게</button></div>`;
+  return `<div class="paint-tools"><span class="paint-hint">날짜를 누르고 점심·저녁을 골라요</span><button class="quick-btn" data-act="quickOpen">${ic.bolt}빠르게</button></div>`;
+}
+
+// 날짜를 누르면 아래에서 점심·저녁 고르기
+function dayPanel() {
+  const day = state.selDay;
+  if (!day || state.quickOpen) return '';
+  const l = state.mine.has(`${day}|L`);
+  const d = state.mine.has(`${day}|D`);
+  const oL = state.counts[`${day}|L`] || 0;
+  const oD = state.counts[`${day}|D`] || 0;
+  const inWin = day >= addDays(today(), ROOM_FROM) && day <= addDays(today(), ROOM_TO);
+  const opt = (v, label, on) => `<button class="day-opt${on ? (v ? ' on' : ' on-none') : ''}" data-act="setDay" data-v="${v}" aria-pressed="${on}">${label}</button>`;
+  return `
+  <div class="day-panel" role="dialog" aria-label="${longDate(day)} 칠하기">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <div class="stack-sm" style="gap:1px"><b style="font-size:16px">${longDate(day)}</b>
+        <span style="font-size:12.5px;color:var(--quiet)">되는 친구 점심 ${oL}명 · 저녁 ${oD}명${inWin ? ' · 방이 생길 수 있는 날' : ''}</span></div>
+      <button class="link-btn" style="min-height:32px;padding:0;white-space:nowrap;flex:none" data-act="closeDay">닫기</button>
+    </div>
+    <div class="day-opts">
+      ${opt('L', '<i class="dot" style="background:var(--lunch)"></i>점심', l && !d)}
+      ${opt('D', '<i class="dot" style="background:var(--dinner)"></i>저녁', d && !l)}
+      ${opt('LD', '둘 다', l && d)}
+      ${opt('', '안 돼요', !l && !d)}
+    </div>
+  </div>`;
 }
 
 function quickSheet() {
@@ -577,7 +639,7 @@ function viewFirstPaint() {
     ${calendar()}
     <p class="note">파란 칸(8~14일 뒤)에 ${state.group.threshold}명 이상 겹치면 방이 생겨요</p>
   </main>
-  ${quickSheet()}
+  ${quickSheet()}${dayPanel()}
   <div class="bottom-bar"><div class="inner">
     <button class="btn primary" data-act="finishOnboarding">완료</button>
   </div></div>`;
@@ -632,7 +694,7 @@ function tabbar() {
 
 function viewMain() {
   const body = state.tab === 'cal' ? viewCalendarTab() : state.tab === 'food' ? viewFood() : state.tab === 'settings' ? viewSettings() : viewHome();
-  return body + tabbar() + (state.tab === 'cal' ? quickSheet() : '');
+  return body + tabbar() + (state.tab === 'cal' ? quickSheet() + dayPanel() : '');
 }
 
 function inviteCard(room) {
@@ -647,17 +709,18 @@ function inviteCard(room) {
   const joined = joinedCount(room);
   const creator = memberById(room.created_by);
   const why = room.kind === 'auto'
-    ? `${need}명 이상 될 수도 있는 시간이라 방이 생겼어요`
+    ? '친구들이 될 수도 있다고 칠한 시간이 겹쳤어요'
     : `${esc(creator?.name || '친구')}님이 초대했어요${room.title ? ' · ' + esc(room.title) : ''}${room.time_label ? ' · ' + esc(room.time_label) : ''}`;
   const bars = Array.from({ length: need }, (_, i) => `<span class="${i < joined ? 'on' : ''}"></span>`).join('');
   return `<div class="invite">
     <div class="row" style="gap:12px;align-items:flex-start">
       <span class="badge-icon" style="background:var(--warn)">${ic.mail}</span>
-      <span class="grow stack-sm"><b style="font-size:15px;font-weight:600">${esc(roomTitle(room))}</b><span style="font-size:12px;color:var(--quiet)">${why}</span></span>
+      <span class="grow stack-sm"><b style="font-size:15px;font-weight:600">${esc(roomTitle(room))}</b><span style="font-size:13px;color:var(--quiet)">${why}</span></span>
     </div>
     <div class="stack-sm">
-      <div class="row" style="justify-content:space-between;font-size:12px"><b style="font-weight:600">${room.kind === 'auto' ? `${need}명 참석하면 확정` : '초대받은 사람이 모두 참석하면 확정'}</b><span style="color:var(--quiet)">지금 ${joined}명 · ${deadlineText(room.reply_deadline)}</span></div>
+      <div class="row" style="justify-content:space-between;font-size:13px"><b style="font-weight:600">${room.kind === 'auto' ? `${need}명 모이면 확정` : '모두 참석하면 확정'}</b><span style="color:var(--quiet)">지금 ${joined}명</span></div>
       <div class="progress" style="grid-template-columns:repeat(${need},minmax(0,1fr))">${bars}</div>
+      <span style="font-size:12.5px;color:var(--quiet)">${deadlineText(room.reply_deadline).replace(' 마감', '')}까지 답해주세요</span>
     </div>
     <div class="row">
       <button class="btn primary small" data-act="respond" data-room="${room.id}" data-status="joined">참석</button>
@@ -746,10 +809,6 @@ function viewHome() {
       <div class="card">${upcoming.length ? upcoming.map(upcomingRow).join('') : '<div class="empty">참석하기로 한 모임이 아직 없어요</div>'}</div>
     </section>
 
-    <section class="stack">
-      <div class="head" style="align-items:center"><h2 class="title-sm">내 일정</h2><button class="link-btn" data-act="tab" data-tab="cal">편집</button></div>
-      ${calendar(true)}
-    </section>
   </main>`;
 }
 
@@ -798,11 +857,10 @@ function viewRoom() {
     <div class="card">
       <div class="list-row"><span class="grow main">참석 ${joined.length}명</span><div class="avatars">${joined.map((m) => avatar(m.name, m.color, 28)).join('')}</div></div>
       ${waiting.length ? `<div class="list-row"><span class="grow meta">아직 답 안 한 사람 ${waiting.length}명</span></div>` : ''}
-      ${room.status === 'open' ? `<div class="list-row"><span class="grow meta">${deadlineText(room.reply_deadline)} · 그때까지 안 모이면 조용히 사라져요</span></div>` : ''}
+      ${room.status === 'open' ? `<div class="list-row"><span class="grow meta">${deadlineText(room.reply_deadline).replace(' 마감', '')}까지 안 모이면 사라져요</span></div>` : ''}
     </div>
-    ${room.status === 'confirmed' && st === 'joined' ? roomVoteSections(room) : `<p class="note">${room.status === 'confirmed' ? '참석하면 시간과 식당 정하기에 함께할 수 있어요.' : '확정되면 참석자끼리 시간과 식당을 정해요.'}</p>`}
-    <p class="note">초대받은 사람만 이 방을 볼 수 있어요.</p>
-    ${st === 'joined' ? `<button class="btn danger" data-act="leaveRoom" data-room="${room.id}">참석 취소</button>` : ''}
+    ${room.status === 'confirmed' && st === 'joined' ? roomVoteSections(room) : `<p class="note">${room.status === 'confirmed' ? '참석하면 시간과 식당을 같이 정해요' : '확정되면 시간과 식당을 정해요'}</p>`}
+    ${st === 'joined' ? `<button class="link-btn quiet-danger" data-act="leaveRoom" data-room="${room.id}">참석 취소</button>` : ''}
     ${st === 'invited' ? `<div class="row"><button class="btn primary small" data-act="respond" data-room="${room.id}" data-status="joined">참석</button><button class="btn white small" data-act="respond" data-room="${room.id}" data-status="passed">패스</button></div>` : ''}
   </main>`;
 }
@@ -818,7 +876,7 @@ function roomVoteSections(room) {
       html += `<section class="stack"><h2 class="title-sm" style="padding:0 4px">시간</h2><div class="card pad row"><b class="grow">${esc(room.time_label)}</b><span class="pill green">정해졌어요</span></div></section>`;
     } else {
       html += `<section class="stack">
-        <div class="stack-sm" style="padding:0 4px"><h2 class="title-sm">몇 시에 볼까요?</h2><span class="sub" style="font-size:12px">하나만 골라요 · ${voteDeadlineText(room.day)}에 1위로 정해져요 · 아무도 안 고르면 가운데 시간</span></div>
+        <div class="stack-sm" style="padding:0 4px"><h2 class="title-sm">몇 시에 볼까요?</h2><span class="sub" style="font-size:12.5px">${voteDeadlineText(room.day)}에 정해져요</span></div>
         <div role="radiogroup" aria-label="시간" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
           ${d.times.map((t) => { const on = d.myTime === t.label; return `<button role="radio" aria-checked="${on}" data-act="voteTime" data-label="${esc(t.label)}" class="btn small ${on ? 'primary' : 'white'}" style="flex-direction:column;gap:0;min-height:56px"><span>${esc(t.label)}</span><span style="font-size:11px;font-weight:500;opacity:.8">${t.votes}명</span></button>`; }).join('')}
         </div>
@@ -843,7 +901,7 @@ function roomVoteSections(room) {
   } else if (tieOn) {
     const ties = room.tie_place_ids.map((id) => ranking.find((p) => p.id === id)).filter(Boolean);
     html += `<section class="stack">
-      <div class="stack-sm" style="padding:0 4px"><h2 class="title-sm">하트가 똑같이 나왔어요</h2><span class="sub" style="font-size:12px">한 곳만 골라주세요 · ${deadlineText(room.tie_deadline)} · 누가 골랐는지는 안 보여요</span></div>
+      <div class="stack-sm" style="padding:0 4px"><h2 class="title-sm">하트가 똑같이 나왔어요</h2><span class="sub" style="font-size:12.5px">한 곳만 골라주세요 · ${deadlineText(room.tie_deadline)}</span></div>
       <div class="card">${ties.map((p) => { const on = d.myTie === p.id; return `<button class="list-row" role="radio" aria-checked="${on}" data-act="voteTie" data-place="${p.id}">${thumb(p, 44)}<span class="grow stack-sm"><span class="main">${esc(p.name)}</span><span class="meta">${placeMeta(p) || '&nbsp;'}</span></span><span style="color:${on ? '#E0164A' : '#C7C7CC'}">${ic.heart(on)}</span></button>`; }).join('')}</div>
     </section>`;
   } else if (!ranking.length) {
@@ -852,7 +910,7 @@ function roomVoteSections(room) {
     const top = ranking[0];
     const rest = ranking.slice(1);
     html += `<section class="stack">
-      <div class="stack-sm" style="padding:0 4px"><h2 class="title-sm">어디서 먹을까요?</h2><span class="sub" style="font-size:12px">${room.kind === 'auto' ? `참석자 하트 1순위로 ${voteDeadlineText(room.day)}에 정해져요` : '1순위를 보고 참석자 누구나 정할 수 있어요'}</span></div>
+      <div class="stack-sm" style="padding:0 4px"><h2 class="title-sm">어디서 먹을까요?</h2><span class="sub" style="font-size:12.5px">${room.kind === 'auto' ? `하트 1순위로 ${voteDeadlineText(room.day)}에 정해져요` : '참석자 누구나 정할 수 있어요'}</span></div>
       <div class="card">
         ${placeRow(top, (top.hearts ? '<span class="pill blue">1순위</span>' : '') + heartBtn(top))}
         <div class="list-row" style="gap:8px">${mapLink(top)}<span class="grow"></span><button class="pill blue" style="border:none;padding:8px 14px;font-size:13px" data-act="setPlace" data-place="${top.id}">여기로 정하기</button></div>
@@ -880,8 +938,9 @@ function viewFood() {
         <span class="grow stack-sm">
           <span class="main">${esc(p.name)}</span>
           <span class="meta">${placeMeta(p) || '&nbsp;'}</span>
-          <span class="row" style="gap:10px">${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener" style="font-size:12px;text-decoration:none">지도 보기</a>` : ''}${p.added_by_me ? `<button data-act="deletePlace" data-place="${p.id}" style="border:none;background:none;padding:0;font-size:12px;color:var(--quiet)">삭제</button>` : ''}</span>
+          ${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener" style="font-size:12px;text-decoration:none;align-self:flex-start">지도 보기</a>` : ''}
         </span>
+        ${p.added_by_me ? `<button class="more-btn" aria-label="${esc(p.name)} 지우기" data-act="deletePlace" data-place="${p.id}">${ic.more}</button>` : ''}
         <button class="icon-btn" style="background:none;color:${p.mine ? '#E0164A' : '#8E8E93'};flex-direction:column;gap:0;height:48px" aria-pressed="${p.mine}" aria-label="${esc(p.name)} 하트" data-act="heart" data-place="${p.id}">${ic.heart(p.mine)}<span style="font-size:11px;font-weight:600">${p.hearts}</span></button>
       </div>`).join('')}</div>
       <p class="note">하트가 많은 곳이 모임 방에서 1순위로 올라가요. 누가 눌렀는지는 안 보여요.</p>`
@@ -1170,14 +1229,13 @@ const actions = {
     if (error) { state.me.notify = prev; render(); throw error; }
   }),
 
-  tab: (el) => { state.tab = el.dataset.tab; go('main'); },
-  brush: (el) => { state.brush = el.dataset.slot; render(); },
+  tab: (el) => { state.tab = el.dataset.tab; state.selDay = null; state.quickOpen = false; go('main'); },
   quickOpen: () => { state.quickOpen = true; render(); },
   quickClose: () => { state.quickOpen = false; render(); },
-  quickPaint: (el) => {
+  quickPaint: async (el) => {
     const q = QUICK[el.dataset.kind];
     const n = quickTargets(el.dataset.kind).length;
-    if (!confirm(`${q.label.replace(' 전부', '')} 빈칸 ${n}개를 칠할까요?\n8~14일 뒤 칸에서 ${state.group.threshold}명 이상 겹치면 바로 방이 생기고 초대장이 가요.`)) return;
+    if (!(await ask(`${q.label.replace(' 전부', '')} 빈칸 ${n}개를 칠할까요?`, `8~14일 뒤 칸에서 ${state.group.threshold}명 이상 겹치면 바로 방이 생기고 초대장이 가요.`, { ok: `${n}칸 칠하기` }))) return;
     run(async () => {
       const { data, error } = await sb.rpc('bulk_paint', { p_group: state.group.id, p_kind: el.dataset.kind });
       if (error) throw error;
@@ -1187,9 +1245,9 @@ const actions = {
       toast(data ? `${data}칸 칠했어요${data < n ? ' (패스했던 칸·없어진 시간대는 건너뛰었어요)' : ''}` : '칠할 수 있는 빈칸이 없었어요');
     });
   },
-  quickClear: () => {
+  quickClear: async () => {
     const n = futureMine();
-    if (!confirm(`앞으로 칠한 ${n}칸을 전부 지울까요?\n이미 생긴 방, 받은 초대장, 참석한 모임은 그대로예요.`)) return;
+    if (!(await ask(`앞으로 칠한 ${n}칸을 전부 지울까요?`, '이미 생긴 방, 받은 초대장, 참석한 모임은 그대로예요.', { ok: '전부 지우기', danger: true }))) return;
     run(async () => {
       const { error } = await sb.rpc('clear_my_paint', { p_group: state.group.id });
       if (error) throw error;
@@ -1199,18 +1257,33 @@ const actions = {
       toast('칠한 칸을 모두 지웠어요');
     });
   },
-  paint: (el) => run(async () => {
-    const day = el.dataset.day;
-    const key = `${day}|${state.brush}`;
-    const on = state.mine.has(key);
-    if (on) state.mine.delete(key); else state.mine.add(key);
+  pickDay: (el) => {
+    state.selDay = state.selDay === el.dataset.day ? null : el.dataset.day;
     render();
-    const q = on
-      ? sb.from('availability').delete().match({ member_id: state.me.id, day, slot: state.brush })
-      : sb.from('availability').insert({ member_id: state.me.id, group_id: state.group.id, day, slot: state.brush });
-    const { error } = await q;
-    if (error) { if (on) state.mine.add(key); else state.mine.delete(key); render(); throw error; }
-    if (!on) softReload();
+  },
+  closeDay: () => { state.selDay = null; render(); },
+  setDay: (el) => run(async () => {
+    const day = state.selDay;
+    if (!day) return;
+    const want = el.dataset.v;
+    const changes = ['L', 'D'].map((slot) => ({ slot, on: state.mine.has(`${day}|${slot}`), want: want.includes(slot) }))
+      .filter((c) => c.on !== c.want);
+    state.selDay = null;
+    for (const c of changes) { if (c.want) state.mine.add(`${day}|${c.slot}`); else state.mine.delete(`${day}|${c.slot}`); }
+    render();
+    try {
+      for (const c of changes) {
+        const { error } = c.want
+          ? await sb.from('availability').insert({ member_id: state.me.id, group_id: state.group.id, day, slot: c.slot })
+          : await sb.from('availability').delete().match({ member_id: state.me.id, day, slot: c.slot });
+        if (error) throw error;
+      }
+    } catch (e) {
+      for (const c of changes) { if (c.on) state.mine.add(`${day}|${c.slot}`); else state.mine.delete(`${day}|${c.slot}`); }
+      render();
+      throw e;
+    }
+    if (changes.some((c) => c.want)) softReload();
   }),
 
   respond: (el) => run(async () => {
@@ -1274,8 +1347,8 @@ const actions = {
     state.tab = 'food';
     go('main');
   }),
-  deletePlace: (el) => {
-    if (!confirm('이 맛집을 지울까요? 모두의 하트도 같이 사라져요.')) return;
+  deletePlace: async (el) => {
+    if (!(await ask('이 맛집을 지울까요?', '모두의 하트도 같이 사라져요.', { ok: '지우기', danger: true }))) return;
     run(async () => {
       const { error } = await sb.rpc('delete_place', { p_place: el.dataset.place });
       if (error) throw error;
@@ -1283,18 +1356,18 @@ const actions = {
       render();
     });
   },
-  leaveRoom: (el) => {
+  leaveRoom: async (el) => {
     const room = state.rooms.find((r) => r.id === el.dataset.room);
-    let msg = '참석을 취소할까요?';
+    let msg = '';
     if (room?.status === 'confirmed') {
       const joined = (room.room_members || []).filter((x) => x.status === 'joined').length - 1;
       const need = room.kind === 'auto' ? state.group.threshold : 2;
       msg = joined >= need
-        ? `참석을 취소할까요? 남은 ${joined}명의 모임은 그대로 진행돼요.`
-        : `참석을 취소할까요? 남는 사람이 ${need}명보다 적어서 모임이 없어져요.`;
+        ? `남은 ${joined}명의 모임은 그대로 진행돼요.`
+        : `남는 사람이 ${need}명보다 적어서 모임이 없어져요.`;
       if (room.kind === 'auto') msg += ' 그 칸 내 칠도 지워져요.';
     }
-    if (!confirm(msg)) return;
+    if (!(await ask('참석을 취소할까요?', msg.trim(), { ok: '참석 취소', danger: true, cancel: '그대로 두기' }))) return;
     run(async () => {
       const { data, error } = await sb.rpc('respond_room', { p_room: el.dataset.room, p_status: 'passed' });
       if (error) throw error;
@@ -1304,11 +1377,11 @@ const actions = {
       go('main');
     });
   },
-  deleteRoom: (el) => {
+  deleteRoom: async (el) => {
     const auto = state.rooms.find((r) => r.id === el.dataset.room)?.kind === 'auto';
-    if (!confirm(auto
-      ? '이 방을 없앨까요? 모두에게서 사라지고 그 칸 내 칠도 지워져요. 누가 그 시간을 새로 칠하면 다시 생길 수 있어요.'
-      : '이 방을 없앨까요? 참석자 모두에게서 사라지고 되돌릴 수 없어요.')) return;
+    if (!(await ask('이 방을 없앨까요?', auto
+      ? '모두에게서 사라지고 그 칸 내 칠도 지워져요. 누가 그 시간을 새로 칠하면 다시 생길 수 있어요.'
+      : '참석자 모두에게서 사라지고 되돌릴 수 없어요.', { ok: '방 없애기', danger: true }))) return;
     run(async () => {
       const { error } = await sb.rpc('delete_room', { p_room: el.dataset.room });
       if (error) throw error;
@@ -1367,9 +1440,9 @@ const actions = {
     state.tab = 'settings';
     go('main');
   }),
-  kickMember: (el) => {
+  kickMember: async (el) => {
     const m = state.members.find((x) => x.id === el.dataset.id);
-    if (!m || !confirm(`${m.name}님을 내보낼까요? 칠한 시간과 참석 기록이 지워져요. 참석하던 확정 모임은 남은 사람이 충분하면 그대로 유지돼요.`)) return;
+    if (!m || !(await ask(`${m.name}님을 내보낼까요?`, '칠한 시간과 참석 기록이 지워져요. 참석하던 확정 모임은 남은 사람이 충분하면 그대로 유지돼요.', { ok: '내보내기', danger: true }))) return;
     run(async () => {
       const { error } = await sb.rpc('kick_member', { p_member: m.id });
       if (error) throw error;
@@ -1378,9 +1451,9 @@ const actions = {
       render();
     });
   },
-  leaveGroup: () => {
+  leaveGroup: async () => {
     const isOwner = state.group.owner_id === state.session.user.id;
-    if (!confirm(`${state.group.name}에서 나갈까요? 내가 칠한 시간과 참석 기록이 모두 지워져요.${isOwner ? ' 방장은 가장 먼저 들어온 멤버에게 넘어가요.' : ''}`)) return;
+    if (!(await ask(`${state.group.name}에서 나갈까요?`, `내가 칠한 시간과 참석 기록이 모두 지워져요.${isOwner ? ' 방장은 가장 먼저 들어온 멤버에게 넘어가요.' : ''}`, { ok: '나가기', danger: true }))) return;
     run(async () => {
       const { error } = await sb.rpc('leave_group', { p_group: state.group.id });
       if (error) throw error;
