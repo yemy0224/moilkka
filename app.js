@@ -210,6 +210,7 @@ function go(view, extra = {}, fromPop = false) {
     else if (wasSub && !isSub) popNav();
   }
   Object.assign(state, extra, { view });
+  if (view === 'main') { try { sessionStorage.setItem('tab', state.tab); } catch {} }
   render();
   window.scrollTo(0, 0);
 }
@@ -310,6 +311,7 @@ async function ensureSession() {
 // 지금 보고 있는 그룹 기억 (이 기기에서만)
 const savedGroup = { get() { try { return localStorage.getItem('group'); } catch { return null; } }, set(v) { try { localStorage.setItem('group', v); } catch {} } };
 let urlGroup = new URLSearchParams(location.search).get('g');
+const openedFromPush = !!urlGroup;
 if (urlGroup) history.replaceState(history.state, '', '/');
 
 async function loadMe(prefer) {
@@ -1645,7 +1647,10 @@ async function boot() {
       await loadGroupData();
       subscribe();
       refreshPush().then(() => { if (state.tab === 'settings') render(); });
-      state.tab = 'home';
+      // 새로고침해도 보던 탭 그대로 (알림을 눌러 들어오면 홈)
+      let saved = null;
+      try { saved = sessionStorage.getItem('tab'); } catch {}
+      state.tab = !openedFromPush && ['home', 'cal', 'food', 'settings'].includes(saved) ? saved : 'home';
       go('main');
       return;
     }
