@@ -308,7 +308,7 @@ const joinedCount = (room) => room.room_members.filter((r) => r.status === 'join
 const needCount = (room) => (room.kind === 'auto' ? state.group.threshold : room.room_members.length);
 const roomTitle = (room) => `${longDate(room.day)} ${SLOT[room.slot]}`;
 const placeById = (id) => state.places.find((p) => p.id === id);
-const voteDeadlineText = (day) => { const { m, d } = md(addDays(day, -5)); return `${m}월 ${d}일 밤 9시`; };
+const voteDeadlineText = (day) => { const { m, d } = md(addDays(day, -3)); return `${m}월 ${d}일 밤 9시`; };
 const placeMeta = (p) => [p.category, p.area].filter(Boolean).map(esc).join(' · ');
 const thumb = (p, size = 48) => { const hues = ['#E0A96D', '#D77A6A', '#7FA88E', '#9DB2C9', '#B9A27E', '#C49BBB']; const h = hues[(p.name || '').length % hues.length]; return `<span class="avatar" style="width:${size}px;height:${size}px;border-radius:${Math.round(size * 0.24)}px;background:${h};color:#fff">${ic.fork}</span>`; };
 const liveRooms = () => state.rooms.filter((r) => !(r.status === 'open' && new Date(r.reply_deadline) < new Date()));
@@ -872,6 +872,21 @@ function viewAddPlace() {
 // ─────────────────────────────────────────────
 // 직접 방 만들기
 // ─────────────────────────────────────────────
+// 새 방: 그날 칠한 친구 수와 응답 마감 미리 보기 (서버 규칙과 같게)
+function manualDeadline(day) {
+  const kst = (d, h) => new Date(`${d}T${String(h).padStart(2, '0')}:00:00+09:00`);
+  let v = new Date(Math.min(Date.now() + 3 * 864e5, kst(addDays(day, -1), 21).getTime()));
+  if (v.getTime() < Date.now() + 3 * 36e5) v = kst(addDays(day, 1), 0);
+  return v.toISOString();
+}
+function newRoomHint(n) {
+  if (!n.day) return '';
+  const others = state.counts[`${n.day}|${n.slot}`] || 0;
+  const mine = state.mine.has(`${n.day}|${n.slot}`);
+  const who = others ? `이날 ${n.slot === 'L' ? '점심' : '저녁'}을 칠한 친구 ${others}명` : `이날 ${n.slot === 'L' ? '점심' : '저녁'}을 칠한 친구는 아직 없어요`;
+  return `<div class="card"><div class="list-row"><span class="grow stack-sm"><span style="font-size:14px">${who}${mine ? ' · 나도 칠함' : ''}</span><span class="meta">응답 ${deadlineText(manualDeadline(n.day))}</span></span></div></div>`;
+}
+
 function viewNewRoom() {
   const n = state.newRoom;
   const friends = state.members.filter((m) => m.id !== state.me.id);
@@ -890,6 +905,7 @@ function viewNewRoom() {
         ${TIMES[n.slot].map((t, i) => `<button class="btn small ${n.time === i ? 'primary' : 'white'}" data-act="nrTime" data-i="${i}">${t}</button>`).join('')}
       </div>
     </div>
+    ${newRoomHint(n)}
     <p class="note">초대한 친구만 이 방을 볼 수 있고, 모두 참석하면 확정돼요</p>
   </main>
   <div class="bottom-bar"><div class="inner">
@@ -1106,6 +1122,7 @@ const actions = {
     if (error) throw error;
     if (data === 'confirmed') toast('확정됐어요!');
     if (data === 'deleted') { toast('방이 없어졌어요'); state.view = 'main'; }
+    if (el.dataset.status === 'passed' && state.rooms.find((r) => r.id === el.dataset.room)?.kind === 'auto') toast('패스했어요. 그 칸 칠도 지웠어요');
     await loadGroupData();
     render();
   }),
@@ -1173,7 +1190,7 @@ const actions = {
   leaveRoom: (el) => {
     const room = state.rooms.find((r) => r.id === el.dataset.room);
     const msg = room?.status === 'confirmed'
-      ? '확정된 모임이라 취소하면 방이 없어지고 모두에게서 사라져요. 취소할까요?'
+      ? '확정된 모임이라 취소하면 방이 없어지고 모두에게서 사라져요. 그 칸 내 칠도 지워져요. 취소할까요?'
       : '참석을 취소할까요?';
     if (!confirm(msg)) return;
     run(async () => {
@@ -1186,7 +1203,10 @@ const actions = {
     });
   },
   deleteRoom: (el) => {
-    if (!confirm('이 방을 없앨까요? 참석자 모두에게서 사라지고 되돌릴 수 없어요.')) return;
+    const auto = state.rooms.find((r) => r.id === el.dataset.room)?.kind === 'auto';
+    if (!confirm(auto
+      ? '이 방을 없앨까요? 모두에게서 사라지고 그 칸 내 칠도 지워져요. 누가 그 시간을 새로 칠하면 다시 생길 수 있어요.'
+      : '이 방을 없앨까요? 참석자 모두에게서 사라지고 되돌릴 수 없어요.')) return;
     run(async () => {
       const { error } = await sb.rpc('delete_room', { p_room: el.dataset.room });
       if (error) throw error;
