@@ -94,6 +94,7 @@ const ic = {
   chevDown: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>',
   bolt: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/></svg>',
   more: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/></svg>',
+  rings: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="9" cy="12" r="5"/><circle cx="15" cy="12" r="5"/></svg>',
   chat: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>',
   send: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
   bell: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>',
@@ -822,39 +823,6 @@ function viewMain() {
   return body + tabbar() + (state.tab === 'cal' ? quickSheet() + dayPanel() : '') + groupSheet();
 }
 
-function inviteCard(room) {
-  const st = myStatus(room);
-  if (st === 'passed') {
-    return `<div class="card row" style="padding:12px 16px;justify-content:space-between">
-      <span class="sub">${esc(roomTitle(room))}은 패스했어요</span>
-      <button class="link-btn" data-act="respond" data-room="${room.id}" data-status="invited">되돌리기</button>
-    </div>`;
-  }
-  const need = needCount(room);
-  const joined = joinedCount(room);
-  const creator = memberById(room.created_by);
-  const why = room.kind === 'auto'
-    ? (room.slot === 'B' ? '점심도 저녁도 겹쳤어요. 시간은 참석자 투표로 정해요' : '친구들이 될 수도 있다고 칠한 시간이 겹쳤어요')
-    : `${esc(creator?.name || '친구')}님이 초대했어요${room.title ? ' · ' + esc(room.title) : ''}${room.time_label ? ' · ' + esc(room.time_label) : ''}`;
-  const bars = Array.from({ length: need }, (_, i) => `<span class="${i < joined ? 'on' : ''}"></span>`).join('');
-  return `<div class="invite">
-    <div class="row" style="gap:12px;align-items:flex-start">
-      <span class="badge-icon" style="background:var(--warn)">${ic.mail}</span>
-      <span class="grow stack-sm"><b style="font-size:14px;font-weight:600">${esc(roomTitle(room))}</b><span style="font-size:12px;color:var(--quiet)">${why}</span></span>
-    </div>
-    ${busyLine(room.day, room.slot === 'B' ? undefined : room.slot)}
-    <div class="stack-sm">
-      <div class="row" style="justify-content:space-between;font-size:12px"><b style="font-weight:600">${room.kind === 'auto' ? `${need}명 모이면 확정` : '모두 참석하면 확정'}</b><span style="color:var(--quiet)">지금 ${joined}명</span></div>
-      <div class="progress" style="grid-template-columns:repeat(${need},minmax(0,1fr))">${bars}</div>
-      <span style="font-size:11.5px;color:var(--quiet)">${new Date(room.reply_deadline) < new Date() ? '응답 마감이 지났지만 지금 참석해도 돼요' : `${deadlineText(room.reply_deadline).replace(' 마감', '')}까지 답해주세요`}</span>
-    </div>
-    <div class="row">
-      <button class="btn primary small" data-act="respond" data-room="${room.id}" data-status="joined">참석</button>
-      <button class="btn gray small" data-act="respond" data-room="${room.id}" data-status="passed">패스</button>
-    </div>
-  </div>`;
-}
-
 function upcomingRow(room) {
   const { m, d } = md(room.day);
   const joined = joinedCount(room);
@@ -874,20 +842,112 @@ function upcomingRow(room) {
   </button>`;
 }
 
-// 홈 맨 위: 내가 칠했는지 (방장은 친구들 칠한 수도 한 줄)
-function myPaintCard() {
-  const t = today();
-  const n = [...state.mine].filter((k) => k.slice(0, 10) >= t).length;
-  const owner = state.group.owner_id === state.session.user.id;
+// 홈: 방장만 보는 한 줄 (친구들 칠한 수)
+function ownerLine() {
   const prog = state.progress;
-  const painted = prog.filter((p) => p.painted).length;
-  const top = n
-    ? `<div class="list-row"><span class="badge-icon" style="background:var(--good-soft);color:var(--good)">${ic.tick}</span><span class="grow stack-sm" style="gap:1px"><b style="font-weight:600;font-size:14px">앞으로 ${n}칸 칠했어요</b><span class="meta">겹치면 초대장으로 알려드려요</span></span><button class="link-btn" data-act="tab" data-tab="cal">수정</button></div>`
-    : `<div class="list-row"><span class="badge-icon" style="background:#FFF4E5;color:#C25E00">${ic.pen}</span><span class="grow stack-sm" style="gap:1px"><b style="font-weight:600;font-size:14px">아직 안 칠했어요</b><span class="meta">될 수도 있는 날 선택하기</span></span><button class="pill blue solid" data-act="tab" data-tab="cal">칠하기</button></div>`;
-  const ownerRow = owner && prog.length > 1
-    ? `<button class="list-row" data-act="tab" data-tab="cal"><span class="pill gray" style="font-size:11px;padding:2px 7px">방장</span><span class="grow" style="font-size:13px">${prog.length}명 중 <b style="font-weight:600">${painted}명</b>이 칠했어요</span>${ic.chev}</button>`
-    : '';
-  return `<div class="card">${top}${ownerRow}</div>`;
+  if (state.group.owner_id !== state.session.user.id || prog.length < 2) return '';
+  return `<button class="owner-line" data-act="tab" data-tab="cal"><span class="pill gray" style="font-size:11px;padding:2px 7px">방장</span><span class="grow">${prog.filter((p) => p.painted).length}/${prog.length}명 칠함</span><span style="color:var(--accent);font-weight:600">보기</span></button>`;
+}
+
+const shortTitle = (room) => { const { m, d } = md(room.day); return `${m}월 ${d}일 ${WD[dow(room.day)]} ${SLOT[room.slot]}`; };
+
+// 다음 모임 (크게)
+function heroCard(room) {
+  const dd = diffDays(room.day);
+  const place = placeById(room.place_id);
+  const joined = room.room_members.filter((r) => r.status === 'joined').map((r) => memberById(r.member_id)).filter(Boolean);
+  const unread = state.unread[room.id]?.unread || 0;
+  const meta = room.status !== 'confirmed'
+    ? `확정까지 ${needCount(room) - joinedCount(room)}명`
+    : [room.time_label || '시간 미정', place ? place.name : '식당 미정'].map(esc).join(' · ');
+  return `<div class="card hero">
+    <div class="row" style="justify-content:space-between"><span class="pill blue">다음 모임</span><button class="link-btn" data-act="newRoom">${ic.plus}새 방</button></div>
+    <button class="hero-main" data-act="openRoom" data-room="${room.id}">
+      <span class="dday"><b>${dd === 0 ? '오늘' : `D-${dd}`}</b><small>${WD[dow(room.day)]}요일</small></span>
+      <span class="grow stack-sm" style="gap:2px;min-width:0">
+        <b class="hero-title">${room.title ? esc(room.title) : `${md(room.day).m}월 ${md(room.day).d}일 ${WD[dow(room.day)]}요일 ${SLOT[room.slot]}`}</b>
+        <span class="meta">${room.title ? esc(shortTitle(room)) + ' · ' : ''}${meta}</span>
+        <span class="avatars" style="margin-top:4px">${joined.slice(0, 8).map((m) => avatar(m.name, m.color, 24)).join('')}</span>
+      </span>
+    </button>
+    <div class="hero-btns">
+      <button class="btn gray small" data-act="openChat" data-room="${room.id}">대화${unread ? `<span class="unread" style="margin-left:6px">${Math.min(unread, 99)}</span>` : ''}</button>
+      ${place?.url ? `<a class="btn gray small" href="${esc(place.url)}" target="_blank" rel="noopener">지도 보기</a>` : `<button class="btn gray small" data-act="openRoom" data-room="${room.id}">자세히</button>`}
+    </div>
+  </div>`;
+}
+
+// 초대장 (한 줄)
+function inviteRow(room) {
+  if (myStatus(room) === 'passed') {
+    return `<div class="card list-row"><span class="grow meta">${esc(shortTitle(room))} 패스함</span><button class="link-btn" data-act="respond" data-room="${room.id}" data-status="invited">되돌리기</button></div>`;
+  }
+  return `<div class="card list-row">
+    <button class="row grow invite-open" data-act="openRoom" data-room="${room.id}">
+      <span class="badge-icon" style="background:#FFF4E5;color:#C25E00">${ic.mail}</span>
+      <span class="grow stack-sm" style="gap:1px;text-align:left"><b class="main" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(room.title || shortTitle(room))}</b><span class="meta">초대장 · ${room.title ? esc(shortTitle(room)) + ' · ' : ''}${joinedCount(room)}/${needCount(room)}명</span></span>
+    </button>
+    <button class="pill blue solid" data-act="respond" data-room="${room.id}" data-status="joined">참석</button>
+  </div>`;
+}
+
+// 앞으로 2주 (누르면 캘린더에서 그 날 열기)
+function homeStrip(meetDays) {
+  const t = today();
+  const winFrom = addDays(t, ROOM_FROM);
+  const winTo = addDays(t, ROOM_TO);
+  let cells = '';
+  for (let i = 0; i < 14; i++) {
+    const day = addDays(t, i);
+    const l = state.mine.has(`${day}|L`);
+    const d = state.mine.has(`${day}|D`);
+    const f = Math.min(Math.max(state.counts[`${day}|L`] || 0, state.counts[`${day}|D`] || 0), 3);
+    const cls = meetDays.has(day) ? ' meet' : day >= winFrom && day <= winTo ? ' window' : '';
+    cells += `<button class="strip-cell${cls}" data-act="homeDay" data-day="${day}" aria-label="${longDate(day)}${meetDays.has(day) ? ', 모임' : ''}">
+      <span class="wd${dow(day) === 0 ? ' sun' : ''}">${i === 0 ? '오늘' : WD[dow(day)]}</span>
+      <b class="${dow(day) === 0 ? 'sun' : ''}">${md(day).d}</b>
+      <span class="capsule"><span class="${l ? 'l' : ''}"></span><span class="${d ? 'd' : ''}"></span></span>
+      <span class="fdots">${'<i></i>'.repeat(f)}</span>
+    </button>`;
+  }
+  return `<section class="stack-sm"><h2 class="title-sm" style="padding:0 4px">앞으로 2주</h2><div class="card strip">${cells}</div></section>`;
+}
+
+// 방이 생길 수 있는 기간에서 친구가 제일 많이 칠한 칸 (내가 아직 안 칠한 것)
+function bestSlot() {
+  const t = today();
+  let best = null;
+  for (let i = ROOM_FROM; i <= ROOM_TO; i++) {
+    const day = addDays(t, i);
+    if (state.rooms.some((r) => r.kind === 'auto' && r.day === day)) continue;
+    for (const slot of ['L', 'D']) {
+      const n = state.counts[`${day}|${slot}`] || 0;
+      if (!n || state.mine.has(`${day}|${slot}`) || state.busySlots[`${day}|${slot}`]) continue;
+      if (!best || n > best.n) best = { day, slot, n };
+    }
+  }
+  return best;
+}
+
+function bestBig(b) {
+  const need = state.group.threshold;
+  const bars = Array.from({ length: Math.max(need, b.n + 1) }, (_, i) => `<span class="${i < b.n ? 'on' : i === b.n ? 'me' : ''}"></span>`).join('');
+  return `<div class="card hero">
+    <span class="pill orange" style="align-self:flex-start">제일 많이 겹친 날</span>
+    <div class="stack-sm" style="gap:3px"><b class="hero-title" style="font-size:19px">${longDate(b.day)} ${SLOT[b.slot]}</b>
+      <span class="meta" style="font-size:13px">${b.n + 1 >= need ? '나까지 칠하면 방이 생겨요' : `친구 ${b.n}명이 겹쳐요`}</span></div>
+    <div class="best-bar">${bars}<small>${b.n}/${need}</small></div>
+    <button class="btn primary" data-act="paintBest" data-day="${b.day}" data-slot="${b.slot}">나도 칠하기</button>
+  </div>`;
+}
+
+function bestSmall(b) {
+  const { m, d } = md(b.day);
+  return `<div class="card list-row">
+    <span class="badge-icon" style="background:var(--accent-soft);color:var(--accent)">${ic.rings}</span>
+    <span class="grow stack-sm" style="gap:1px"><b class="main">${m}월 ${d}일 ${WD[dow(b.day)]} ${SLOT[b.slot]}</b><span class="meta">친구 ${b.n}명이 겹쳐요</span></span>
+    <button class="pill blue" data-act="paintBest" data-day="${b.day}" data-slot="${b.slot}">칠하기</button>
+  </div>`;
 }
 
 // 캘린더 위: 누가 칠했는지 (나는 항상 맨 앞, 어느 날인지는 안 보여요)
@@ -908,8 +968,10 @@ function paintStrip() {
 function viewHome() {
   const rooms = liveRooms();
   const invites = rooms.filter((r) => r.status === 'open' && ['invited', 'passed'].includes(myStatus(r)));
-  const upcoming = rooms.filter((r) => myStatus(r) === 'joined');
-  const fresh = invites.length === 0 && upcoming.length === 0;
+  const upcoming = rooms.filter((r) => myStatus(r) === 'joined').sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+  const meetDays = new Set(upcoming.map((r) => r.day));
+  const best = bestSlot();
+  const [next, ...rest] = upcoming;
   return `
   <main class="screen">
     <div class="head">
@@ -919,24 +981,20 @@ function viewHome() {
           ? `<button class="group-switch" data-act="groupSheetOpen" aria-label="그룹 바꾸기, 지금 ${esc(state.group.name)}"><span class="title-lg">${esc(state.group.name)}</span>${ic.chevDown}</button>`
           : `<h1 class="title-lg">${esc(state.group.name)}</h1>`}
       </div>
-      <div class="avatars" style="padding-bottom:6px">${state.members.slice(0, 8).map((m) => avatar(m.name, m.color, 30)).join('')}</div>
+      <div class="avatars" style="padding-bottom:6px">${state.members.slice(0, 8).map((m) => avatar(m.name, m.color, 28)).join('')}</div>
     </div>
 
-    ${myPaintCard()}
-
-    ${fresh ? `
-    <div class="card pad row" style="gap:14px;align-items:flex-start">
-      <span class="badge-icon" style="background:var(--warn)">${ic.mail}</span>
-      <span class="grow stack-sm"><b style="font-weight:600">아직 초대장이 없어요</b><span class="sub" style="font-size:13px">8~14일 뒤 같은 시간대를 ${state.group.threshold}명 이상 칠하면 여기로 초대장이 와요.</span></span>
-    </div>` : ''}
-
-    ${invites.length ? `<section class="stack"><h2 class="title-sm" style="padding:0 4px">초대장</h2>${invites.map(inviteCard).join('')}</section>` : ''}
-
-    <section class="stack">
-      <div class="head" style="align-items:center"><h2 class="title-sm">다가오는 모임</h2><button class="link-btn" data-act="newRoom">${ic.plus}새 방</button></div>
-      <div class="card">${upcoming.length ? upcoming.map(upcomingRow).join('') : '<div class="empty">참석하기로 한 모임이 아직 없어요</div>'}</div>
-    </section>
-
+    ${next ? heroCard(next) : best ? bestBig(best) : ''}
+    ${rest.length ? `<div class="card">${rest.map(upcomingRow).join('')}</div>` : ''}
+    ${invites.map(inviteRow).join('')}
+    ${homeStrip(meetDays)}
+    ${next && best ? bestSmall(best) : ''}
+    ${next ? '' : `<div class="card list-row">
+      <span class="badge-icon" style="background:var(--bg);color:var(--quiet)">${ic.mail}</span>
+      <span class="grow main">아직 약속이 없어요</span>
+      <button class="pill gray" style="color:var(--accent-ink)" data-act="newRoom">+ 새 방</button>
+    </div>`}
+    ${ownerLine()}
   </main>`;
 }
 
@@ -1302,8 +1360,8 @@ function newRoomHint(n) {
   if (!n.day) return '';
   const others = state.counts[`${n.day}|${n.slot}`] || 0;
   const mine = state.mine.has(`${n.day}|${n.slot}`);
-  const who = others ? `이날 ${n.slot === 'L' ? '점심' : '저녁'}을 칠한 친구 ${others}명` : `이날 ${n.slot === 'L' ? '점심' : '저녁'}을 칠한 친구는 아직 없어요`;
-  return `<div class="card"><div class="list-row"><span class="grow stack-sm"><span style="font-size:14px">${who}${mine ? ' · 나도 칠함' : ''}</span><span class="meta">응답 ${deadlineText(manualDeadline(n.day))}</span>${busyLine(n.day, n.slot)}</span></div></div>`;
+  const dl = deadlineText(manualDeadline(n.day)).replace(' 마감', '').replace('오전 12시', '자정');
+  return `<div class="stack-sm" style="padding:0 4px;gap:4px"><span style="font-size:12.5px;color:var(--quiet)">칠한 친구 ${others}명${mine ? ' · 나도 칠함' : ''} · ${dl}까지 응답</span>${busyLine(n.day, n.slot)}</div>`;
 }
 
 function viewNewRoom() {
@@ -1313,8 +1371,8 @@ function viewNewRoom() {
   return `
   <main class="screen" style="gap:16px">
     <div class="topbar"><button class="back" data-act="toHome">취소</button><b>새 방</b><span style="width:40px"></span></div>
-    <div class="field"><label for="roomTitle">방 이름</label><input class="input" id="roomTitle" maxlength="30" placeholder="예: 전시 보러 가기" value="${esc(n.title)}"></div>
-    <div class="field"><span class="label">초대할 친구</span>
+    <div class="field"><label for="roomTitle">이름 (선택)</label><input class="input" id="roomTitle" maxlength="30" placeholder="예: 전시 보러 가기" value="${esc(n.title)}"></div>
+    <div class="field"><span class="label">친구</span>
       <div class="card">${friends.length ? friends.map((f) => `<button class="list-row" role="checkbox" aria-checked="${n.invitees.has(f.id)}" data-act="toggleInvitee" data-id="${f.id}">${avatar(f.name, f.color, 30)}<span class="grow">${esc(f.name)}</span><span class="avatar" style="width:24px;height:24px;${n.invitees.has(f.id) ? 'background:var(--accent);color:#fff' : 'border:1.5px solid #C7C7CC'};font-size:12px">${n.invitees.has(f.id) ? '✓' : ''}</span></button>`).join('') : '<div class="empty">아직 들어온 친구가 없어요</div>'}</div>
     </div>
     <div class="field"><label for="roomDay">날짜</label><input class="input" type="date" id="roomDay" min="${today()}" value="${esc(n.day)}"></div>
@@ -1325,10 +1383,10 @@ function viewNewRoom() {
       </div>
     </div>
     ${newRoomHint(n)}
-    <p class="note">초대한 친구만 볼 수 있어요. 모두 참석하면 확정되고(패스한 사람은 빼고), 마감 때는 참석한 사람끼리 확정돼요. 직접 없애기 전엔 사라지지 않아요</p>
+    <p class="note">초대한 친구만 보여요 · 모두 참석하면 확정</p>
   </main>
   <div class="bottom-bar"><div class="inner">
-    <button class="btn primary" data-act="createRoom" ${count && n.day ? '' : 'disabled'}>${count ? `${count}명에게 초대 보내기` : '친구를 골라주세요'}</button>
+    <button class="btn primary" data-act="createRoom" ${count && n.day ? '' : 'disabled'}>${count ? `${count}명 초대` : '친구를 골라주세요'}</button>
   </div></div>`;
 }
 
@@ -1590,6 +1648,16 @@ const actions = {
     render();
   },
   closeDay: () => { state.selDay = null; render(); },
+  homeDay: (el) => { const day = el.dataset.day; actions.tab({ dataset: { tab: 'cal' } }); state.selDay = day; render(); },
+  paintBest: (el) => run(async () => {
+    const { day, slot } = el.dataset;
+    state.mine.add(`${day}|${slot}`);
+    render();
+    const { error } = await sb.from('availability').insert({ member_id: state.me.id, group_id: state.group.id, day, slot });
+    if (error) { state.mine.delete(`${day}|${slot}`); render(); throw error; }
+    toast('칠했어요');
+    softReload();
+  }),
   setDay: (el) => run(async () => {
     const day = state.selDay;
     if (!day) return;
