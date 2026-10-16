@@ -937,7 +937,8 @@ function viewSettings() {
     ${notifySection()}
     <div class="stack-sm">
       <span class="note">멤버</span>
-      <div class="card">${state.members.map((m) => `<div class="list-row">${avatar(m.name, m.color, 30)}<span class="grow">${esc(m.name)}</span></div>`).join('')}</div>
+      <div class="card">${state.members.map((m) => `<div class="list-row">${avatar(m.name, m.color, 30)}<span class="grow">${esc(m.name)}${m.id === state.me.id ? ' (나)' : ''}</span>${owner && m.id !== state.me.id ? `<button class="pill" style="border:none;font-size:12px;padding:6px 12px;color:var(--danger)" data-act="kickMember" data-id="${m.id}">내보내기</button>` : ''}</div>`).join('')}</div>
+      ${owner ? '<p class="note">방장은 멤버를 내보낼 수 있어요. 그 사람의 칠과 참석은 지워지고, 초대 번호로 다시 들어올 수 있어요</p>' : ''}
     </div>
     <div class="stack-sm">
       <p class="note">이 기기에서만 로그인돼 있어요. 앱을 지우거나 브라우저 데이터를 지우면 초대 번호로 다시 들어와야 해요.</p>
@@ -1272,8 +1273,20 @@ const actions = {
     state.tab = 'settings';
     go('main');
   }),
+  kickMember: (el) => {
+    const m = state.members.find((x) => x.id === el.dataset.id);
+    if (!m || !confirm(`${m.name}님을 내보낼까요? 칠한 시간과 참석 기록이 지워져요. 참석하던 확정 모임은 남은 사람이 충분하면 그대로 유지돼요.`)) return;
+    run(async () => {
+      const { error } = await sb.rpc('kick_member', { p_member: m.id });
+      if (error) throw error;
+      toast(`${m.name}님을 내보냈어요`);
+      await loadGroupData();
+      render();
+    });
+  },
   leaveGroup: () => {
-    if (!confirm(`${state.group.name}에서 나갈까요? 내가 칠한 시간과 참석 기록이 모두 지워져요.`)) return;
+    const isOwner = state.group.owner_id === state.session.user.id;
+    if (!confirm(`${state.group.name}에서 나갈까요? 내가 칠한 시간과 참석 기록이 모두 지워져요.${isOwner ? ' 방장은 가장 먼저 들어온 멤버에게 넘어가요.' : ''}`)) return;
     run(async () => {
       const { error } = await sb.rpc('leave_group', { p_group: state.group.id });
       if (error) throw error;
