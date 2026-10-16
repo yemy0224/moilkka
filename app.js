@@ -117,7 +117,13 @@ function ask(title, body = '', { ok = '확인', cancel = '취소', danger = fals
         <button class="btn ${danger ? 'danger-solid' : 'primary'}" data-ok>${esc(ok)}</button>
         <button class="btn white" data-cancel>${esc(cancel)}</button>
       </div>`;
-    const done = (v) => { wrap.classList.add('out'); setTimeout(() => wrap.remove(), 160); resolve(v); };
+    const done = (v, fromPop = false) => {
+      askCancel = null;
+      if (!fromPop) popNav();
+      wrap.classList.add('out'); setTimeout(() => wrap.remove(), 160); resolve(v);
+    };
+    askCancel = (fromPop) => done(false, fromPop);
+    pushNav();
     wrap.querySelector('[data-ok]').onclick = () => done(true);
     wrap.querySelector('[data-cancel]').onclick = () => done(false);
     wrap.querySelector('.ask-back').onclick = () => done(false);
@@ -158,7 +164,43 @@ async function share(text) {
   catch { toast(text); }
 }
 
-function go(view, extra = {}) {
+// 뒤로가기: 하위 화면·열린 창은 기록을 남겨서 휴대폰 뒤로가기로 닫혀요 (앱이 꺼지지 않게)
+const SUB_VIEWS = ['room', 'newRoom', 'addPlace', 'editProfile'];
+let navDepth = 0;
+let pendingBack = 0;
+let popSkip = 0;
+let overlayPushed = false;
+let askCancel = null;
+function pushNav() { history.pushState({ nav: Date.now() }, ''); navDepth++; }
+function popNav() {
+  if (navDepth <= 0) return;
+  navDepth--;
+  if (!pendingBack) setTimeout(() => { const n = pendingBack; pendingBack = 0; popSkip++; history.go(-n); }, 0);
+  pendingBack++;
+}
+function syncOverlayNav() {
+  const open = !!(state.selDay || state.quickOpen);
+  if (open && !overlayPushed) { overlayPushed = true; pushNav(); }
+  else if (!open && overlayPushed) { overlayPushed = false; popNav(); }
+}
+window.addEventListener('popstate', () => {
+  if (popSkip) { popSkip--; return; }
+  navDepth = Math.max(0, navDepth - 1);
+  if (askCancel) { askCancel(true); return; }
+  if (overlayPushed) { overlayPushed = false; state.selDay = null; state.quickOpen = false; render(); return; }
+  if (SUB_VIEWS.includes(state.view)) {
+    if (state.view === 'editProfile') state.tab = 'settings';
+    go('main', {}, true);
+  }
+});
+
+function go(view, extra = {}, fromPop = false) {
+  const wasSub = SUB_VIEWS.includes(state.view);
+  const isSub = SUB_VIEWS.includes(view);
+  if (!fromPop) {
+    if (!wasSub && isSub) pushNav();
+    else if (wasSub && !isSub) popNav();
+  }
   Object.assign(state, extra, { view });
   render();
   window.scrollTo(0, 0);
@@ -338,19 +380,16 @@ const roomTitle = (room) => `${longDate(room.day)} ${SLOT[room.slot]}`;
 const placeById = (id) => state.places.find((p) => p.id === id);
 const voteDeadlineText = (day) => { const { m, d } = md(addDays(day, -3)); return `${m}월 ${d}일 밤 9시`; };
 const placeMeta = (p) => [p.category, p.area].filter(Boolean).map(esc).join(' · ');
-// 맛집 아이콘: 종류(없으면 이름)에서 음식 종류를 짐작해요
-const FOOD_KINDS = [
-  { re: /카페|커피|디저트|베이커리|빵|케이크|도넛|아이스크림|티룸/, bg: '#F2ECE6', fg: '#7A5537', svg: '<path d="M5 9h11v5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5z"/><path d="M16 10h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M9 3.5c0 1.5 1 1.5 1 3M12.5 3.5c0 1.5 1 1.5 1 3"/>' },
-  { re: /술|바$|바 |와인|맥주|포차|펍|이자카야|칵테일|하이볼|막걸리/, bg: '#EFEAFB', fg: '#6A4BB8', svg: '<path d="M7 3h10l-1 7a4 4 0 0 1-8 0z"/><path d="M12 14v6M8.5 20h7"/>' },
-  { re: /고기|삼겹|갈비|곱창|막창|구이|바베큐|BBQ|스테이크|한우|양꼬치|족발|보쌈|닭갈비/i, bg: '#FDE8E6', fg: '#C53B2C', svg: '<path d="M12 21c-3.9 0-6.5-2.6-6.5-6 0-3.5 3-5.5 3.5-9 2 1.5 3 3 3.2 5 .8-.8 1.3-1.8 1.4-3 2.4 2 4.4 4.3 4.4 7 0 3.4-2.6 6-6 6z"/>' },
-  { re: /일식|스시|초밥|라멘|우동|소바|오마카세|돈카츠|돈까스|규동|덮밥|사시미|회/, bg: '#E3F3F4', fg: '#1D7A80', svg: '<path d="M3 12c3-4.5 9-5.5 13-2l4-3v10l-4-3c-4 3.5-10 2.5-13-2z"/><circle cx="8" cy="11.2" r="0.9" fill="currentColor"/>' },
-  { re: /중식|중국|마라|딤섬|짜장|짬뽕|훠궈|양장피|탕수육/, bg: '#FFF4D6', fg: '#9A6200', svg: '<path d="M4 12h16a8 8 0 0 1-16 0z"/><path d="M14 3l-4 8M18.5 4l-5 7"/>' },
-  { re: /양식|이탈리|파스타|피자|프렌치|브런치|버거|햄버거|비스트로|리조또/, bg: '#E8F3EA', fg: '#2F7A45', svg: '<path d="M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10M17 3c-2 0-3 2-3 5s1 4 3 4v9"/>' },
-  { re: /태국|베트남|쌀국수|인도|커리|카레|멕시|타코|아시안|분짜|팟타이/, bg: '#EAF5DD', fg: '#55791C', svg: '<path d="M4 12h16a8 8 0 0 1-16 0z"/><path d="M8 8c1-1.5 3-1.5 4 0s3 1.5 4 0"/>' },
-  { re: /한식|국밥|찌개|백반|분식|떡볶이|김밥|냉면|칼국수|국수|순대|보리밥|한정식|곰탕|해장/, bg: '#FFF1E3', fg: '#C2610C', svg: '<path d="M4 11h16a8 8 0 0 1-16 0z"/><path d="M9 7.5c0-1.5 1-1.5 1-3M13 7.5c0-1.5 1-1.5 1-3"/>' },
-];
-const foodKind = (p) => FOOD_KINDS.find((k) => k.re.test(p.category || '')) || FOOD_KINDS.find((k) => k.re.test(p.name || ''))
-  || { bg: '#EEF1F5', fg: '#5A6B80', svg: '<path d="M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10M17 3c-2 0-3 2-3 5s1 4 3 4v9"/>' };
+// 맛집 종류 (필수 5개)와 아이콘
+const CATS = ['한식', '중식', '일식', '분식', '기타'];
+const CAT_LOOK = {
+  한식: { bg: '#FFF1E3', fg: '#C2610C', svg: '<path d="M4 11h16a8 8 0 0 1-16 0z"/><path d="M9 7.5c0-1.5 1-1.5 1-3M13 7.5c0-1.5 1-1.5 1-3"/>' },
+  중식: { bg: '#FFF4D6', fg: '#9A6200', svg: '<path d="M4 12h16a8 8 0 0 1-16 0z"/><path d="M14 3l-4 8M18.5 4l-5 7"/>' },
+  일식: { bg: '#E3F3F4', fg: '#1D7A80', svg: '<path d="M3 12c3-4.5 9-5.5 13-2l4-3v10l-4-3c-4 3.5-10 2.5-13-2z"/><circle cx="8" cy="11.2" r="0.9" fill="currentColor"/>' },
+  분식: { bg: '#FDE8EE', fg: '#B8325E', svg: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/>' },
+  기타: { bg: '#EEF1F5', fg: '#5A6B80', svg: '<path d="M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10M17 3c-2 0-3 2-3 5s1 4 3 4v9"/>' },
+};
+const foodKind = (p) => CAT_LOOK[p.category] || CAT_LOOK['기타'];
 const thumb = (p, size = 48) => {
   const k = foodKind(p);
   const icon = Math.round(size * 0.5);
@@ -637,7 +676,7 @@ function viewFirstPaint() {
     </div>
     ${paintTools()}
     ${calendar()}
-    <p class="note">파란 칸(8~14일 뒤)에 ${state.group.threshold}명 이상 겹치면 방이 생겨요</p>
+    <p class="note">파란 칸에 ${state.group.threshold}명이 겹치면 방이 생겨요</p>
   </main>
   ${quickSheet()}${dayPanel()}
   <div class="bottom-bar"><div class="inner">
@@ -757,7 +796,7 @@ function myPaintCard() {
   const painted = prog.filter((p) => p.painted).length;
   const top = n
     ? `<div class="list-row"><span class="badge-icon" style="background:var(--good-soft);color:var(--good)">${ic.tick}</span><span class="grow stack-sm" style="gap:1px"><b style="font-weight:600;font-size:14px">앞으로 ${n}칸 칠했어요</b><span class="meta">겹치면 초대장으로 알려드려요</span></span><button class="link-btn" data-act="tab" data-tab="cal">수정</button></div>`
-    : `<div class="list-row"><span class="badge-icon" style="background:#FFF4E5;color:#C25E00">${ic.pen}</span><span class="grow stack-sm" style="gap:1px"><b style="font-weight:600;font-size:14px">아직 안 칠했어요</b><span class="meta">될 수도 있는 점심·저녁만 칠해두면 돼요</span></span><button class="pill blue solid" data-act="tab" data-tab="cal">칠하기</button></div>`;
+    : `<div class="list-row"><span class="badge-icon" style="background:#FFF4E5;color:#C25E00">${ic.pen}</span><span class="grow stack-sm" style="gap:1px"><b style="font-weight:600;font-size:14px">아직 안 칠했어요</b><span class="meta">될 수도 있는 날 선택하기</span></span><button class="pill blue solid" data-act="tab" data-tab="cal">칠하기</button></div>`;
   const ownerRow = owner && prog.length > 1
     ? `<button class="list-row" data-act="tab" data-tab="cal"><span class="pill gray" style="font-size:11px;padding:2px 7px">방장</span><span class="grow" style="font-size:13px">${prog.length}명 중 <b style="font-weight:600">${painted}명</b>이 칠했어요</span>${ic.chev}</button>`
     : '';
@@ -825,7 +864,7 @@ function viewCalendarTab() {
     ${paintTools()}
     <div class="stack-sm">
       ${calendar()}
-      <p class="note">파란 칸(8~14일 뒤)에 ${state.group.threshold}명 이상 겹치면 방이 생겨요 · 누가 어느 날을 칠했는지는 안 보여요</p>
+      <p class="note">파란 칸에 ${state.group.threshold}명이 겹치면 방이 생겨요</p>
     </div>
     ${coming.length ? `<section class="stack"><h2 class="title-sm" style="padding:0 4px">생긴 방</h2><div class="card">${coming.map((r) => `<button class="list-row" data-act="tab" data-tab="home"><span class="grow">${esc(roomTitle(r))}</span><span class="pill ${r.status === 'confirmed' ? 'green' : 'orange'}">${r.status === 'confirmed' ? '확정' : '초대 중'}</span>${ic.chev}</button>`).join('')}</div></section>` : ''}
   </main>`;
@@ -926,24 +965,32 @@ function roomVoteSections(room) {
 // 맛집
 // ─────────────────────────────────────────────
 function viewFood() {
-  const list = state.places;
+  const all = state.places;
+  const cat = state.foodCat || '전체';
+  const list = cat === '전체' ? all : all.filter((p) => p.category === cat);
+  const chips = ['전체', ...CATS].map((c) => {
+    const n = c === '전체' ? all.length : all.filter((p) => p.category === c).length;
+    return `<button class="cat-chip${cat === c ? ' on' : ''}" aria-pressed="${cat === c}" data-act="foodCat" data-cat="${c}">${c}<span>${n}</span></button>`;
+  }).join('');
   return `
   <main class="screen">
     <div class="head">
-      <div class="stack-sm" style="gap:0"><span class="eyebrow">우리가 담아둔 곳 ${list.length}</span><h1 class="title-lg">맛집</h1></div>
+      <div class="stack-sm" style="gap:0"><span class="eyebrow">우리가 담아둔 곳 ${all.length}</span><h1 class="title-lg">맛집</h1></div>
       <button class="icon-btn" style="background:var(--accent);color:#fff;margin-bottom:4px" aria-label="맛집 담기" data-act="addPlaceOpen">${ic.plus}</button>
     </div>
-    ${list.length ? `<div class="card">${list.map((p) => `<div class="list-row">
-        ${thumb(p, 48)}
+    ${all.length ? `<div class="cat-scroll">${chips}</div>` : ''}
+    ${list.length ? `<div class="card food-list">${list.map((p) => `<div class="list-row">
+        ${thumb(p, 40)}
         <span class="grow stack-sm">
           <span class="main">${esc(p.name)}</span>
           <span class="meta">${placeMeta(p) || '&nbsp;'}</span>
-          ${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener" style="font-size:12px;text-decoration:none;align-self:flex-start">지도 보기</a>` : ''}
+          ${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener" style="font-size:11.5px;text-decoration:none;align-self:flex-start">지도 보기</a>` : ''}
         </span>
         ${p.added_by_me ? `<button class="more-btn" aria-label="${esc(p.name)} 지우기" data-act="deletePlace" data-place="${p.id}">${ic.more}</button>` : ''}
         <button class="icon-btn" style="background:none;color:${p.mine ? '#E0164A' : '#8E8E93'};flex-direction:column;gap:0;height:48px" aria-pressed="${p.mine}" aria-label="${esc(p.name)} 하트" data-act="heart" data-place="${p.id}">${ic.heart(p.mine)}<span style="font-size:11px;font-weight:600">${p.hearts}</span></button>
       </div>`).join('')}</div>
-      <p class="note">하트가 많은 곳이 모임 방에서 1순위로 올라가요. 누가 눌렀는지는 안 보여요.</p>`
+      <p class="note">하트가 많은 곳이 모임 방에서 1순위로 올라가요</p>`
+      : all.length ? `<div class="card pad"><span class="sub" style="font-size:13px">${esc(cat)}으로 담은 곳이 아직 없어요</span></div>`
       : `<div class="card pad stack-sm" style="align-items:flex-start"><b style="font-weight:600">아직 담아둔 맛집이 없어요</b><span class="sub">네이버 지도에서 가고 싶은 곳의 링크를 담아두세요.</span><button class="link-btn" data-act="addPlaceOpen">${ic.plus}맛집 담기</button></div>`}
   </main>`;
 }
@@ -971,24 +1018,24 @@ function applyShareText(text) {
 
 function placeFormValid() {
   const f = state.placeForm;
-  return f.name.trim() && (!f.url.trim() || isNaverUrl(f.url));
+  return f.name.trim() && CATS.includes(f.category) && (!f.url.trim() || isNaverUrl(f.url));
 }
 function viewAddPlace() {
   const f = state.placeForm;
   const bad = f.url.trim() && !isNaverUrl(f.url);
   return `
   <main class="screen" style="gap:16px">
-    <div class="topbar"><button class="back" data-act="toFood">취소</button><b>맛집 담기</b><span style="width:40px"></span></div>
+    <div class="topbar"><button class="back" data-act="toFood">${ic.back}맛집</button><b>맛집 담기</b><span style="width:40px"></span></div>
     <div class="field">
       <label for="placeUrl">네이버 지도 링크</label>
       <div class="row"><input class="input" id="placeUrl" inputmode="url" placeholder="https://naver.me/..." value="${esc(f.url)}" style="${bad ? 'border-color:var(--danger)' : ''}"><button class="btn white small" style="width:auto;white-space:nowrap" data-act="pasteLink">붙여넣기</button></div>
       <p class="note" id="urlNote" style="${bad ? 'color:var(--danger)' : ''}">${bad ? '네이버 지도 링크만 담을 수 있어요' : '네이버 지도 앱에서 장소 → 공유 → 링크 복사'}</p>
     </div>
     <div class="field"><label for="placeName">식당 이름</label><input class="input" id="placeName" maxlength="40" placeholder="예: 창가 파스타" value="${esc(f.name)}"></div>
-    <div class="row" style="gap:10px">
-      <div class="field grow"><label for="placeCat">종류 (선택)</label><input class="input" id="placeCat" maxlength="20" placeholder="예: 이탈리안" value="${esc(f.category)}"></div>
-      <div class="field grow"><label for="placeArea">동네 (선택)</label><input class="input" id="placeArea" maxlength="20" placeholder="예: 서울역" value="${esc(f.area)}"></div>
+    <div class="field"><span class="label">종류</span>
+      <div class="cat-pick" role="radiogroup" aria-label="종류">${CATS.map((c) => `<button role="radio" aria-checked="${f.category === c}" class="cat-chip${f.category === c ? ' on' : ''}" data-act="pickCat" data-cat="${c}">${c}</button>`).join('')}</div>
     </div>
+    <div class="field"><label for="placeArea">동네 (선택)</label><input class="input" id="placeArea" maxlength="20" placeholder="예: 서울역" value="${esc(f.area)}"></div>
     <p class="note">담으면 내 하트가 하나 들어가요.</p>
   </main>
   <div class="bottom-bar"><div class="inner">
@@ -1092,6 +1139,7 @@ function render() {
     : v === 'addPlace' ? viewAddPlace()
     : '<div class="loading">불러오는 중…</div>';
   app.innerHTML = html;
+  syncOverlayNav();
   if (v === 'code') setTimeout(() => document.getElementById('codeInput')?.focus(), 50);
 }
 
@@ -1329,7 +1377,9 @@ const actions = {
     render();
     toast('식당을 정했어요');
   }),
-  addPlaceOpen: () => { state.placeForm = { url: '', name: '', category: '', area: '' }; go('addPlace'); },
+  pickCat: (el) => { state.placeForm.category = el.dataset.cat; render(); },
+  foodCat: (el) => { state.foodCat = el.dataset.cat; render(); },
+  addPlaceOpen: () => { state.placeForm = { url: '', name: '', category: state.foodCat && state.foodCat !== '전체' ? state.foodCat : '', area: '' }; go('addPlace'); },
   pasteLink: async () => {
     try {
       const text = await navigator.clipboard.readText();
