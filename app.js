@@ -440,13 +440,15 @@ const placeById = (id) => state.places.find((p) => p.id === id);
 const voteDeadlineText = (day) => { const { m, d } = md(addDays(day, -3)); return `${m}월 ${d}일 밤 9시`; };
 const placeMeta = (p) => [p.category, p.area].filter(Boolean).map(esc).join(' · ');
 // 맛집 종류 (필수 5개)와 아이콘
-const CATS = ['한식', '중식', '일식', '분식', '기타'];
+const CATS = ['한식', '중식', '일식', '양식', '분식', '술집', '기타'];
 const CAT_LOOK = {
   한식: { bg: '#FFF1E3', fg: '#C2610C', svg: '<path d="M4 11h16a8 8 0 0 1-16 0z"/><path d="M9 7.5c0-1.5 1-1.5 1-3M13 7.5c0-1.5 1-1.5 1-3"/>' },
   중식: { bg: '#FFF4D6', fg: '#9A6200', svg: '<path d="M4 12h16a8 8 0 0 1-16 0z"/><path d="M14 3l-4 8M18.5 4l-5 7"/>' },
   일식: { bg: '#E3F3F4', fg: '#1D7A80', svg: '<path d="M3 12c3-4.5 9-5.5 13-2l4-3v10l-4-3c-4 3.5-10 2.5-13-2z"/><circle cx="8" cy="11.2" r="0.9" fill="currentColor"/>' },
   분식: { bg: '#FDE8EE', fg: '#B8325E', svg: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/>' },
-  기타: { bg: '#EEF1F5', fg: '#5A6B80', svg: '<path d="M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10M17 3c-2 0-3 2-3 5s1 4 3 4v9"/>' },
+  양식: { bg: '#E8F3EA', fg: '#2F7A45', svg: '<path d="M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10M17 3c-2 0-3 2-3 5s1 4 3 4v9"/>' },
+  술집: { bg: '#EFEAFB', fg: '#6A4BB8', svg: '<path d="M7 3h10l-1 7a4 4 0 0 1-8 0z"/><path d="M12 14v6M8.5 20h7"/>' },
+  기타: { bg: '#EEF1F5', fg: '#5A6B80', svg: '<circle cx="6" cy="12" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="18" cy="12" r="1.2" fill="currentColor"/>' },
 };
 const foodKind = (p) => CAT_LOOK[p.category] || CAT_LOOK['기타'];
 const thumb = (p, size = 48) => {
@@ -1210,7 +1212,8 @@ function viewFood() {
   const all = state.places;
   const cat = state.foodCat || '전체';
   const list = cat === '전체' ? all : all.filter((p) => p.category === cat);
-  const chips = ['전체', ...CATS].map((c) => {
+  // 담긴 곳이 있는 종류만 보여요 (지금 고른 종류는 0개여도 보여요)
+  const chips = ['전체', ...CATS.filter((c) => c === cat || all.some((p) => p.category === c))].map((c) => {
     const n = c === '전체' ? all.length : all.filter((p) => p.category === c).length;
     return `<button class="cat-chip${cat === c ? ' on' : ''}" aria-pressed="${cat === c}" data-act="foodCat" data-cat="${c}">${c}<span>${n}</span></button>`;
   }).join('');
