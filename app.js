@@ -35,6 +35,8 @@ const state = {
   groups: [],        // 내가 들어간 그룹들 [{id, name}]
   adding: false,     // 다른 그룹을 추가하는 중
   groupSheet: false,
+  unread: {},        // 방 id -> {unread, muted}
+  chat: null,        // 대화 화면 {roomId, messages, draft, muted, picking}
   busySlots: {},     // 다른 그룹에서 확정된 내 시간 'YYYY-MM-DD|L' -> {group_name, time_label}
   newRoom: null,
   places: [],
@@ -83,7 +85,7 @@ const ic = {
   x: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   plus: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
   lock: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
-  bell: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>',
+  bellBig: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>',
   fork: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10M17 3c-2 0-3 2-3 5s1 4 3 4v9"/></svg>',
   heart: (on) => `<svg width="22" height="22" viewBox="0 0 24 24" fill="${on ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>`,
   pin: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>',
@@ -92,6 +94,10 @@ const ic = {
   chevDown: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>',
   bolt: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/></svg>',
   more: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/></svg>',
+  chat: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>',
+  send: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+  bell: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>',
+  bellOff: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 9.5-4.9M18 11v5l1.5 2H8"/><path d="M10 20.5a2 2 0 0 0 4 0M4 4l16 16"/></svg>',
   pen: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 7l3 3"/></svg>',
   check: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#248A3D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/></svg>',
 };
@@ -172,7 +178,7 @@ async function share(text) {
 }
 
 // 뒤로가기: 하위 화면·열린 창은 기록을 남겨서 휴대폰 뒤로가기로 닫혀요 (앱이 꺼지지 않게)
-const SUB_VIEWS = ['room', 'newRoom', 'addPlace', 'editProfile'];
+const SUB_VIEWS = ['room', 'newRoom', 'addPlace', 'editProfile', 'chat'];
 const isSubView = (v, extra = {}) => SUB_VIEWS.includes(v) || ((extra.adding ?? state.adding) && ['code', 'profile', 'group'].includes(v));
 let navDepth = 0;
 let pendingBack = 0;
@@ -196,6 +202,14 @@ window.addEventListener('popstate', () => {
   navDepth = Math.max(0, navDepth - 1);
   if (askCancel) { askCancel(true); return; }
   if (overlayPushed) { overlayPushed = false; state.selDay = null; state.quickOpen = false; state.groupSheet = false; render(); return; }
+  if (state.view === 'chat') {
+    const id = state.chat?.roomId;
+    closeChatChannel();
+    state.chat = null;
+    go('room', { roomId: id }, true);
+    loadGroupData().then(() => loadRoomDetail(id)).then(render).catch(() => {});
+    return;
+  }
   if (isSubView(state.view)) {
     if (state.view === 'editProfile' || state.adding) state.tab = 'settings';
     go('main', { adding: false }, true);
@@ -206,9 +220,12 @@ function go(view, extra = {}, fromPop = false) {
   const wasSub = isSubView(state.view);
   const isSub = isSubView(view, extra);
   if (!fromPop) {
-    if (!wasSub && isSub) pushNav();
+    if (view === 'chat' && state.view !== 'chat' && wasSub) pushNav();          // 방 → 대화: 한 단계 더
+    else if (state.view === 'chat' && view !== 'chat' && isSub) popNav();     // 대화 → 방
+    else if (!wasSub && isSub) pushNav();
     else if (wasSub && !isSub) popNav();
   }
+  if (state.view === 'chat' && view !== 'chat') closeChatChannel();
   Object.assign(state, extra, { view });
   if (view === 'main') { try { sessionStorage.setItem('tab', state.tab); } catch {} }
   render();
@@ -223,6 +240,7 @@ const NOTIFY_KINDS = [
   ['vote', '시간 · 식당', '투표 마감 하루 전, 시간과 식당이 정해졌을 때'],
   ['eve', '모임 전날', '전날 저녁 7시에 한 번'],
   ['long', '오랜만이에요', '한 달 가까이 못 봤을 때'],
+  ['chat', '대화', '참석한 모임의 새 메시지 (방마다 끌 수도 있어요)'],
 ];
 const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 
@@ -312,6 +330,7 @@ async function ensureSession() {
 const savedGroup = { get() { try { return localStorage.getItem('group'); } catch { return null; } }, set(v) { try { localStorage.setItem('group', v); } catch {} } };
 let urlGroup = new URLSearchParams(location.search).get('g');
 const openedFromPush = !!urlGroup;
+let urlChat = new URLSearchParams(location.search).get('c');
 if (urlGroup) history.replaceState(history.state, '', '/');
 
 async function loadMe(prefer) {
@@ -370,6 +389,8 @@ async function loadGroupData() {
   state.mine = new Set(mine.data.map((a) => `${a.day}|${a.slot}`));
   state.counts = Object.fromEntries(counts.data.map((c) => [`${c.day}|${c.slot}`, c.others]));
   state.progress = prog.data;
+  const { data: unread } = await sb.rpc('room_unread', { p_group: gid });
+  state.unread = Object.fromEntries((unread || []).map((u) => [u.room_id, u]));
   state.busySlots = {};
   if (state.groups.length > 1) {
     const { data: busy } = await sb.rpc('my_busy', { p_group: gid });
@@ -752,7 +773,7 @@ function viewNotify() {
   return `
   <main class="screen">
     <div class="stack-sm" style="padding:8px 4px 0">
-      <div class="notify-icon">${ic.bell}</div>
+      <div class="notify-icon">${ic.bellBig}</div>
       <h1 class="title-md">방이 생기면
 알려드릴까요?</h1>
       <p class="sub">${need ? '아이폰은 홈 화면에 추가한 앱에서만 알림을 받을 수 있어요. 나중에 설정에서 켤 수 있어요' : '초대장, 확정, 투표 마감, 모임 전날에만 알려드려요. 종류별로 설정에서 끌 수 있어요'}</p>
@@ -847,7 +868,7 @@ function upcomingRow(room) {
   return `<button class="list-row" data-act="openRoom" data-room="${room.id}">
     <span class="datebox"><small>${m}월</small><b>${d}</b></span>
     <span class="grow stack-sm"><span class="main">${WD[dow(room.day)]}요일 ${SLOT[room.slot]} · ${joined}명</span><span class="meta">${meta}</span></span>
-    ${pill}${ic.chev}
+    ${state.unread[room.id]?.unread ? `<span class="unread" aria-label="안 읽은 메시지 ${state.unread[room.id].unread}개">${Math.min(state.unread[room.id].unread, 99)}</span>` : pill}${ic.chev}
   </button>`;
 }
 
@@ -939,6 +960,156 @@ function viewCalendarTab() {
 // ─────────────────────────────────────────────
 // 방 상세
 // ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// 방 대화 (참석한 사람만)
+// ─────────────────────────────────────────────
+let chatChannel = null;
+let readTimer = null;
+const hhmm = (iso) => new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date(iso));
+const kday = (iso) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date(iso));
+
+async function openChat(roomId) {
+  const room = state.rooms.find((r) => r.id === roomId);
+  if (!room || myStatus(room) !== 'joined') { toast('참석한 모임에서만 대화할 수 있어요'); return; }
+  state.roomId = roomId;
+  go('chat', { chat: { roomId, messages: [], draft: '', muted: !!state.unread[roomId]?.muted, picking: false, loading: true } });
+  const { data, error } = await sb.from('messages').select('id,member_id,kind,body,place_id,created_at').eq('room_id', roomId).order('id').limit(300);
+  if (error) { toast(errText(error)); return; }
+  if (state.chat?.roomId !== roomId) return;
+  state.chat.messages = data || [];
+  state.chat.loading = false;
+  render();
+  markRead();
+  if (chatChannel) sb.removeChannel(chatChannel);
+  chatChannel = sb.channel('chat-' + roomId)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` }, (p) => addMessage(p.new))
+    .subscribe();
+}
+function closeChatChannel() { if (chatChannel) { sb.removeChannel(chatChannel); chatChannel = null; } }
+
+function addMessage(m) {
+  const c = state.chat;
+  if (!c || c.roomId !== m.room_id && m.room_id) return;
+  if (c.messages.some((x) => x.id === m.id)) return;
+  c.messages.push(m);
+  c.messages.sort((a, b) => a.id - b.id);
+  if (state.view !== 'chat') return;
+  const list = document.getElementById('chatList');
+  const near = list && list.scrollHeight - list.scrollTop - list.clientHeight < 80;
+  const box = document.getElementById('chatItems');
+  if (box) box.innerHTML = chatItems();
+  if (list && (near || m.member_id === state.me.id)) list.scrollTop = list.scrollHeight;
+  markRead();
+}
+
+function markRead() {
+  clearTimeout(readTimer);
+  readTimer = setTimeout(() => {
+    const c = state.chat;
+    if (!c || !c.messages.length) return;
+    const last = c.messages[c.messages.length - 1].id;
+    sb.rpc('mark_read', { p_room: c.roomId, p_last: last }).then(() => {
+      if (state.unread[c.roomId]) state.unread[c.roomId].unread = 0;
+    });
+  }, 400);
+}
+
+function chatItems() {
+  const c = state.chat;
+  if (c.loading) return '<div class="chat-empty">불러오는 중…</div>';
+  if (!c.messages.length) return '<div class="chat-empty">첫 마디를 남겨보세요. 맛집 카드를 보내면 바로 하트를 누를 수 있어요</div>';
+  let html = '';
+  let lastDay = null;
+  let lastWho = null;
+  for (const m of c.messages) {
+    const day = kday(m.created_at);
+    if (day !== lastDay) { html += `<div class="chat-day">${longDate(day)}</div>`; lastDay = day; lastWho = null; }
+    if (m.kind === 'system') { html += `<div class="chat-sys">${esc(m.body)}</div>`; lastWho = null; continue; }
+    const mine = m.member_id === state.me.id;
+    const who = memberById(m.member_id);
+    const showName = !mine && lastWho !== (m.member_id || 'gone');
+    lastWho = m.member_id || 'gone';
+    let bubble;
+    if (m.kind === 'place') {
+      const p = placeById(m.place_id);
+      bubble = p
+        ? `<div class="chat-place">${m.body ? `<p>${esc(m.body)}</p>` : ''}<div class="row" style="gap:10px">${thumb(p, 36)}<span class="grow stack-sm" style="gap:0"><b>${esc(p.name)}</b><span class="meta">${placeMeta(p) || '&nbsp;'}</span></span><button class="chat-heart" style="color:${p.mine ? '#E0164A' : '#8E8E93'}" aria-pressed="${p.mine}" aria-label="${esc(p.name)} 하트" data-act="heart" data-place="${p.id}">${ic.heart(p.mine)}<small>${p.hearts}</small></button></div><div class="row" style="gap:12px">${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">지도 보기</a>` : ''}${mine ? `<button class="chat-card-del" data-act="deleteMessage" data-id="${m.id}">지우기</button>` : ''}</div></div>`
+        : '<div class="chat-bubble gone">지워진 맛집이에요</div>';
+    } else {
+      bubble = `<div class="chat-bubble">${esc(m.body)}</div>`;
+    }
+    html += `<div class="chat-msg${mine ? ' mine' : ''}">
+      ${showName ? `<div class="chat-who">${who ? avatar(who.name, who.color, 22) : ''}<span>${who ? esc(who.name) : '나간 친구'}</span></div>` : ''}
+      <div class="chat-line">${mine && m.kind === 'text' ? `<button class="chat-del" data-act="deleteMessage" data-id="${m.id}" aria-label="내 메시지, 눌러서 지우기">${bubble}</button>` : bubble}<time>${hhmm(m.created_at)}</time></div>
+    </div>`;
+  }
+  return html;
+}
+
+// 시간·식당이 아직 안 정해졌으면 대화 위에 바로가기 (대화로 정해도 투표를 해야 반영돼요)
+function chatPin(room) {
+  if (room.kind !== 'auto' || room.status !== 'confirmed' || room.finalized) return '';
+  const my = state.detail && state.detail.id === room.id ? state.detail.myTime : null;
+  return `<button class="chat-pin" data-act="openRoom" data-room="${room.id}">${ic.cal}<span class="grow">시간 투표 ${voteDeadlineText(room.day)} 마감 · ${my ? `내 선택 ${esc(my)}` : '아직 안 골랐어요'}</span>${ic.chev}</button>`;
+}
+
+function viewChat() {
+  const c = state.chat;
+  const room = state.rooms.find((r) => r.id === c.roomId);
+  if (!room) return `<main class="screen"><button class="back" data-act="toHome">${ic.back}홈</button><p class="empty">이 방은 없어졌어요</p></main>`;
+  return `
+  <div class="chat-wrap" id="chatWrap">
+    <div class="chat-top">
+      <button class="back" data-act="chatBack">${ic.back}</button>
+      <div class="grow stack-sm" style="gap:0;min-width:0"><b class="chat-title">${esc(room.title || roomTitle(room))}</b><span class="meta">참석 ${joinedCount(room)}명</span></div>
+      <button class="icon-btn" data-act="chatMute" aria-pressed="${c.muted}" aria-label="${c.muted ? '이 방 알림 켜기' : '이 방 알림 끄기'}" style="color:${c.muted ? '#AEAEB2' : 'var(--accent)'}">${c.muted ? ic.bellOff : ic.bell}</button>
+    </div>
+    ${chatPin(room)}
+    <div class="chat-list" id="chatList"><div id="chatItems">${chatItems()}</div></div>
+    <div class="chat-input">
+      <button class="icon-btn chat-plus" data-act="chatPlacePick" aria-label="맛집 보내기">${ic.fork}</button>
+      <textarea id="chatInput" rows="1" maxlength="500" placeholder="메시지" aria-label="메시지"></textarea>
+      <button class="icon-btn chat-send" data-act="chatSend" aria-label="보내기">${ic.send}</button>
+    </div>
+  </div>
+  ${c.picking ? chatPlaceSheet() : ''}`;
+}
+
+function chatPlaceSheet() {
+  const list = state.places;
+  return `
+  <div class="sheet-back" data-act="chatPlaceClose"></div>
+  <div class="sheet" role="dialog" aria-label="맛집 보내기">
+    <div class="sheet-grip"></div>
+    <div class="row" style="justify-content:space-between;padding:0 4px"><h2 class="title-sm">맛집 보내기</h2><button class="link-btn" data-act="chatPlaceClose">닫기</button></div>
+    ${list.length ? `<div class="card" style="max-height:55vh;overflow:auto">${list.map((p) => `<button class="list-row" data-act="chatSendPlace" data-place="${p.id}">${thumb(p, 36)}<span class="grow stack-sm" style="gap:0"><span class="main">${esc(p.name)}</span><span class="meta">${placeMeta(p) || '&nbsp;'}</span></span><span class="meta">♥ ${p.hearts}</span></button>`).join('')}</div>`
+      : '<div class="card pad"><span class="sub">아직 담아둔 맛집이 없어요. 맛집 탭에서 먼저 담아주세요</span></div>'}
+  </div>`;
+}
+
+// 키보드가 올라와도 입력칸이 가려지지 않게 (아이폰 홈 화면 앱)
+function fitChat() {
+  const wrap = document.getElementById('chatWrap');
+  if (!wrap || !window.visualViewport) return;
+  const vv = window.visualViewport;
+  wrap.style.height = vv.height + 'px';
+  wrap.style.transform = `translateY(${vv.offsetTop}px)`;
+}
+if (window.visualViewport) {
+  visualViewport.addEventListener('resize', () => { fitChat(); const l = document.getElementById('chatList'); if (l && document.activeElement?.id === 'chatInput') l.scrollTop = l.scrollHeight; });
+  visualViewport.addEventListener('scroll', fitChat);
+}
+
+function afterChatRender(keep) {
+  fitChat();
+  const input = document.getElementById('chatInput');
+  if (input) { input.value = state.chat.draft || ''; autoGrow(input); }
+  const list = document.getElementById('chatList');
+  if (list) list.scrollTop = !keep || keep.bottom ? list.scrollHeight : keep.top;
+  if (keep?.focus && input) input.focus();
+}
+function autoGrow(t) { t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 120) + 'px'; }
+
 function viewRoom() {
   const room = state.rooms.find((r) => r.id === state.roomId);
   if (!room) return `<main class="screen"><button class="back" data-act="toHome">${ic.back}홈</button><p class="empty">이 방은 없어졌어요</p></main>`;
@@ -959,6 +1130,7 @@ function viewRoom() {
       <h1 class="title-md">${esc(room.title || roomTitle(room))}</h1>
       <span class="sub" style="font-size:13px">${room.title ? esc(roomTitle(room)) + ' · ' : ''}${room.time_label ? esc(room.time_label) + ' · ' : ''}${dd === 0 ? '오늘' : `D-${dd}`} · ${room.status === 'confirmed' ? '확정' : `확정까지 ${needCount(room) - joined.length}명`}</span>
     </div>
+    ${st === 'joined' ? `<button class="card list-row chat-entry" data-act="openChat" data-room="${room.id}">${ic.chat}<span class="grow stack-sm" style="gap:1px"><span class="main">대화</span><span class="meta">${state.unread[room.id]?.unread ? `안 읽은 메시지 ${state.unread[room.id].unread}개` : '여기 어때? 몇 시가 좋아? 참석한 사람끼리'}</span></span>${state.unread[room.id]?.unread ? `<span class="unread">${Math.min(state.unread[room.id].unread, 99)}</span>` : ''}${ic.chev}</button>` : ''}
     <div class="card">
       <div class="list-row"><span class="grow main">참석 ${joined.length}명</span><div class="avatars">${joined.map((m) => avatar(m.name, m.color, 28)).join('')}</div></div>
       ${waiting.length ? `<div class="list-row"><span class="grow meta">아직 답 안 한 사람 ${waiting.length}명</span></div>` : ''}
@@ -1216,8 +1388,13 @@ function render() {
     : v === 'room' ? viewRoom()
     : v === 'newRoom' ? viewNewRoom()
     : v === 'addPlace' ? viewAddPlace()
+    : v === 'chat' ? viewChat()
     : '<div class="loading">불러오는 중…</div>';
+  const list = document.getElementById('chatList');
+  const keep = list && v === 'chat' ? { top: list.scrollTop, bottom: list.scrollHeight - list.scrollTop - list.clientHeight < 40, focus: document.activeElement?.id === 'chatInput' } : null;
   app.innerHTML = html;
+  document.body.classList.toggle('in-chat', v === 'chat');
+  if (v === 'chat') afterChatRender(keep);
   syncOverlayNav();
   if (v === 'code') setTimeout(() => document.getElementById('codeInput')?.focus(), 50);
 }
@@ -1236,6 +1413,7 @@ app.addEventListener('paste', (e) => {
 
 app.addEventListener('input', (e) => {
   const t = e.target;
+  if (t.id === 'chatInput') { state.chat.draft = t.value; autoGrow(t); return; }
   if (t.id === 'codeInput') {
     const v = t.value.replace(/\D/g, '').slice(0, 6);
     t.value = v;
@@ -1442,6 +1620,47 @@ const actions = {
     await loadGroupData();
     render();
   }),
+  openChat: (el) => openChat(el.dataset.room),
+  chatBack: () => { closeChatChannel(); const id = state.chat?.roomId; state.chat = null; go('room', { roomId: id }); run(async () => { await loadGroupData(); await loadRoomDetail(id); render(); }); },
+  chatSend: () => {
+    const c = state.chat;
+    const input = document.getElementById('chatInput');
+    const body = (input?.value || '').trim();
+    if (!body) return;
+    c.draft = ''; input.value = ''; autoGrow(input); input.focus();
+    sb.rpc('send_message', { p_room: c.roomId, p_body: body }).then(({ data, error }) => {
+      if (error) { c.draft = body; if (state.view === 'chat') { input.value = body; } toast(errText(error)); return; }
+      addMessage({ id: data, room_id: c.roomId, member_id: state.me.id, kind: 'text', body, place_id: null, created_at: new Date().toISOString() });
+    });
+  },
+  chatPlacePick: () => { state.chat.picking = true; render(); },
+  chatPlaceClose: () => { state.chat.picking = false; render(); },
+  chatSendPlace: (el) => {
+    const c = state.chat;
+    c.picking = false; render();
+    sb.rpc('send_message', { p_room: c.roomId, p_body: null, p_place: el.dataset.place }).then(({ data, error }) => {
+      if (error) { toast(errText(error)); return; }
+      addMessage({ id: data, room_id: c.roomId, member_id: state.me.id, kind: 'place', body: null, place_id: el.dataset.place, created_at: new Date().toISOString() });
+    });
+  },
+  chatMute: () => run(async () => {
+    const c = state.chat;
+    const next = !c.muted;
+    const { error } = await sb.rpc('set_room_mute', { p_room: c.roomId, p_muted: next });
+    if (error) throw error;
+    c.muted = next;
+    if (state.unread[c.roomId]) state.unread[c.roomId].muted = next;
+    toast(next ? '이 방 대화 알림을 껐어요' : '이 방 대화 알림을 켰어요');
+    render();
+  }),
+  deleteMessage: async (el) => {
+    if (!(await ask('이 메시지를 지울까요?', '모두의 대화에서 사라져요.', { ok: '지우기', danger: true }))) return;
+    const id = Number(el.dataset.id);
+    const { error } = await sb.rpc('delete_message', { p_id: id });
+    if (error) { toast(errText(error)); return; }
+    state.chat.messages = state.chat.messages.filter((m) => m.id !== id);
+    render();
+  },
   openRoom: (el) => {
     state.detail = null;
     state.showOthers = false;
@@ -1652,6 +1871,7 @@ async function boot() {
       try { saved = sessionStorage.getItem('tab'); } catch {}
       state.tab = !openedFromPush && ['home', 'cal', 'food', 'settings'].includes(saved) ? saved : 'home';
       go('main');
+      if (urlChat) { const c = urlChat; urlChat = null; openChat(c); }
       return;
     }
     go('welcome');
@@ -1666,7 +1886,9 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').cat
 if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => {
   if (!e.data || !state.me) return;
   const g = e.data.url ? new URL(e.data.url, location.origin).searchParams.get('g') : null;
-  if (g && g !== state.group?.id && state.groups.some((x) => x.id === g)) { switchGroup(g).catch(() => {}); return; }
-  loadGroupData().then(render).catch(() => {});
+  const c = e.data.url ? new URL(e.data.url, location.origin).searchParams.get('c') : null;
+  const after = () => { if (c) openChat(c); };
+  if (g && g !== state.group?.id && state.groups.some((x) => x.id === g)) { switchGroup(g).then(after).catch(() => {}); return; }
+  loadGroupData().then(() => { render(); after(); }).catch(() => {});
 });
 boot();

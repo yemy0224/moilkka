@@ -258,3 +258,44 @@ body:has(.day-panel) .screen { padding-bottom: 240px; }
 .busy-line { font-size: 12px; color: #8A4B00; background: #FFF4E5; border-radius: 10px; padding: 7px 10px; }
 .busy-line b { font-weight: 600; }
 .room-dot.busy { background: #C7C7CC; }
+
+/* 방 대화 */
+body.in-chat { overflow: hidden; }
+.unread { flex: none; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--accent); color: #fff; font-size: 11.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.chat-entry { color: var(--ink); }
+.chat-entry > svg:first-child { color: var(--accent); flex: none; }
+.chat-wrap { position: fixed; left: 0; right: 0; top: 0; height: 100dvh; display: flex; flex-direction: column; background: var(--bg); max-width: 560px; margin: 0 auto; z-index: 5; }
+.chat-top { display: flex; align-items: center; gap: 8px; padding: calc(8px + var(--safe-top)) 12px 8px 4px; background: rgba(242,242,247,0.94); border-bottom: 0.5px solid var(--line); }
+.chat-top .back { min-width: 40px; }
+.chat-title { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-top .meta { font-size: 11.5px; color: var(--quiet); }
+.chat-pin { display: flex; align-items: center; gap: 8px; margin: 8px 12px 0; padding: 9px 12px; border: none; border-radius: 12px; background: var(--accent-soft); color: var(--accent-ink); font-size: 12.5px; font-weight: 600; text-align: left; }
+.chat-pin svg { width: 16px; height: 16px; flex: none; }
+.chat-list { flex: 1; overflow-y: auto; padding: 8px 12px 12px; -webkit-overflow-scrolling: touch; }
+.chat-empty { text-align: center; color: var(--quiet); font-size: 13px; padding: 40px 20px; }
+.chat-day { text-align: center; font-size: 11px; color: var(--quiet); margin: 14px 0 6px; }
+.chat-sys { text-align: center; font-size: 11.5px; color: var(--quiet); background: #E9E9EE; border-radius: 10px; padding: 6px 10px; margin: 8px auto; max-width: 88%; }
+.chat-msg { display: flex; flex-direction: column; align-items: flex-start; margin-top: 4px; }
+.chat-msg.mine { align-items: flex-end; }
+.chat-who { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--quiet); margin: 8px 0 3px; }
+.chat-who .avatar { font-size: 10px; }
+.chat-line { display: flex; align-items: flex-end; gap: 5px; max-width: 82%; }
+.chat-msg.mine .chat-line { flex-direction: row-reverse; }
+.chat-line time { font-size: 10px; color: #AEAEB2; flex: none; padding-bottom: 2px; }
+.chat-bubble { background: var(--card); border-radius: 16px; padding: 8px 12px; font-size: 14px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; text-align: left; }
+.chat-bubble.gone { color: var(--quiet); font-size: 12.5px; }
+.chat-msg.mine .chat-bubble { background: var(--accent); color: #fff; }
+.chat-del { border: none; background: none; padding: 0; text-align: inherit; color: inherit; display: block; max-width: 100%; }
+.chat-place { background: var(--card); border-radius: 16px; padding: 10px 12px; width: 240px; max-width: 100%; display: flex; flex-direction: column; gap: 6px; text-align: left; color: var(--ink); }
+.chat-place p { margin: 0; font-size: 14px; }
+.chat-place b { font-size: 13.5px; }
+.chat-place .meta { font-size: 11.5px; color: var(--quiet); }
+.chat-place a { font-size: 12px; text-decoration: none; }
+.chat-heart { border: none; background: none; display: flex; flex-direction: column; align-items: center; padding: 0; min-width: 32px; }
+.chat-heart small { font-size: 10.5px; font-weight: 600; }
+.chat-input { display: flex; align-items: flex-end; gap: 6px; padding: 8px 10px calc(8px + var(--safe-bottom)); background: var(--card); border-top: 0.5px solid var(--line); }
+.chat-input textarea { flex: 1; resize: none; border: none; background: var(--bg); border-radius: 18px; padding: 9px 14px; font-size: 15px; line-height: 1.35; max-height: 120px; outline: none; }
+.chat-input .icon-btn { width: 38px; height: 38px; flex: none; }
+.chat-plus { color: var(--quiet); background: none; }
+.chat-send { background: var(--accent); color: #fff; border-radius: 19px; }
+.chat-card-del { border: none; background: none; padding: 0; font-size: 12px; color: var(--quiet); }

@@ -62,7 +62,7 @@ select cron.schedule('49th-cleanup', '0 * * * *', 'select public.cleanup_rooms()
 | `config.js` | Supabase 주소와 공개용 키 |
 | `manifest.webmanifest`, `sw.js`, `icons/` | 홈 화면에 설치되는 앱으로 만드는 파일 |
 | `supabase/migrations/0001_init.sql` | 테이블, 보안 규칙, 방 자동 생성 규칙 |
-| `supabase/migrations/0005~0011` | 규칙 정리, 빠지기, 내보내기, 빠르게 칠하기, 맛집 종류, 직접 방 유지, 여러 그룹 |
+| `supabase/migrations/0005~0013` | 규칙 정리, 빠지기, 내보내기, 빠르게 칠하기, 맛집 종류, 직접 방 유지, 여러 그룹 |
 | `supabase/functions/push/index.ts` | 알림을 실제로 보내는 서버 함수 |
 | `.github/workflows/keepalive.yml` | 하루 한 번 Supabase를 깨워서 잠들지 않게 해요 |
 
@@ -76,6 +76,7 @@ select cron.schedule('49th-cleanup', '0 * * * *', 'select public.cleanup_rooms()
 - 빠지거나 지우거나 패스한 사람은 그 칸 칠이 지워지고, 누가 새로 칠해야 다시 생겨요
 - 자동 방 응답 마감: 3일 뒤와 모임 5일 전 밤 9시 중 빠른 쪽 · 시간·식당 투표 마감: 모임 3일 전 밤 9시
 - 직접 방 만들기(번개 포함, 초대한 친구만 보이고 모두 참석해야 확정, 응답은 전날 밤 9시까지 · 촉박하면 당일 밤까지)
+- 방 대화: 참석한 사람끼리 글자·맛집 카드, 결정 자동 안내, 안 읽은 수, 방별 알림 끄기, 모임 일주일 뒤 정리
 - 설정: 프로필 수정, 초대 번호 공유, 기준 인원(방장만), 멤버 내보내기(방장만), 그룹 나가기(방장이 나가면 가장 먼저 들어온 멤버가 방장)
 
 ## 다음에 붙일 것
