@@ -37,6 +37,7 @@ const state = {
   placeForm: null,
   busy: false,
   error: '',
+  push: 'unknown',   // 이 기기 알림: on | off | denied | unsupported | needInstall
 };
 
 let installPrompt = null;
@@ -76,6 +77,7 @@ const ic = {
   x: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   plus: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
   lock: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
+  bell: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>',
   fork: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10M17 3c-2 0-3 2-3 5s1 4 3 4v9"/></svg>',
   heart: (on) => `<svg width="22" height="22" viewBox="0 0 24 24" fill="${on ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>`,
   pin: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>',
@@ -109,6 +111,7 @@ function errText(e) {
   if (/join first/.test(m)) return '참석한 사람만 할 수 있어요';
   if (/only the person who added/.test(m)) return '담은 사람만 지울 수 있어요';
   if (/places_url_check/.test(m)) return '네이버 지도 링크만 담을 수 있어요';
+  if (/push not ready/.test(m)) return '알림 서버를 준비 중이에요. 1분 뒤에 다시 눌러주세요';
   if (/Failed to fetch|NetworkError/i.test(m)) return '인터넷 연결을 확인해주세요';
   return '문제가 생겼어요: ' + m;
 }
@@ -131,6 +134,89 @@ function go(view, extra = {}) {
   Object.assign(state, extra, { view });
   render();
   window.scrollTo(0, 0);
+}
+
+// ─────────────────────────────────────────────
+// 푸시 알림
+// ─────────────────────────────────────────────
+const NOTIFY_KINDS = [
+  ['invite', '초대장 · 확정 · 취소', '새 방이 생기거나 모임이 확정·취소될 때'],
+  ['vote', '시간 · 식당', '투표 마감 하루 전, 시간과 식당이 정해졌을 때'],
+  ['eve', '모임 전날', '전날 저녁 7시에 한 번'],
+  ['long', '오랜만이에요', '한 달 가까이 못 봤을 때'],
+];
+const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+
+// 서비스 워커가 준비될 때까지 (최대 4초)
+function swReg() {
+  return Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise((_, rej) => setTimeout(() => rej(new Error('service worker not ready')), 4000)),
+  ]);
+}
+
+function b64ToBytes(b64) {
+  const s = (b64 + '='.repeat((4 - (b64.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+  return Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+}
+
+async function pushStatus() {
+  if (!pushSupported()) return isIOS() && !isStandalone() ? 'needInstall' : 'unsupported';
+  if (Notification.permission === 'denied') return 'denied';
+  if (Notification.permission !== 'granted') return 'off';
+  const reg = await swReg();
+  return (await reg.pushManager.getSubscription()) ? 'on' : 'off';
+}
+
+async function savePushSub(sub) {
+  const j = sub.toJSON();
+  const { error } = await sb.rpc('save_push_subscription', { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth });
+  if (error) throw error;
+}
+
+// 알림 켜기 (버튼을 눌렀을 때만 불러요. 아이폰은 이래야 허락 창이 떠요)
+async function enablePush() {
+  const st = await pushStatus();
+  if (st === 'needInstall') { toast('아이폰은 홈 화면에 추가한 앱에서만 알림을 받을 수 있어요'); return false; }
+  if (st === 'unsupported') { toast('이 브라우저는 알림을 지원하지 않아요'); return false; }
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') {
+    state.push = perm === 'denied' ? 'denied' : 'off';
+    toast(perm === 'denied' ? '알림이 막혀 있어요. 휴대폰 설정에서 49th 알림을 허용해주세요' : '알림을 켜지 않았어요');
+    return false;
+  }
+  const { data: key, error } = await sb.rpc('push_public_key');
+  if (error) throw error;
+  if (!key) throw new Error('push not ready');
+  const reg = await swReg();
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(key) });
+  await savePushSub(sub);
+  state.push = 'on';
+  toast('알림을 켰어요');
+  return true;
+}
+
+async function disablePush() {
+  const reg = await swReg();
+  const sub = await reg.pushManager.getSubscription();
+  if (sub) {
+    await sb.rpc('remove_push_subscription', { p_endpoint: sub.endpoint });
+    await sub.unsubscribe().catch(() => {});
+  }
+  state.push = 'off';
+  toast('이 기기 알림을 껐어요');
+}
+
+// 앱을 열 때마다 조용히 기기 정보를 다시 저장 (주소가 바뀌었을 수 있어요)
+async function refreshPush() {
+  try {
+    state.push = await pushStatus();
+    if (state.push !== 'on') return;
+    const reg = await swReg();
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) await savePushSub(sub);
+  } catch (e) { console.warn(e); }
 }
 
 // ─────────────────────────────────────────────
@@ -451,6 +537,45 @@ function viewFirstPaint() {
   <div class="bottom-bar"><div class="inner">
     <button class="btn primary" data-act="finishOnboarding">완료</button>
   </div></div>`;
+}
+
+function viewNotify() {
+  const need = state.push === 'needInstall';
+  return `
+  <main class="screen">
+    <div class="stack-sm" style="padding:8px 4px 0">
+      <div class="notify-icon">${ic.bell}</div>
+      <h1 class="title-md">방이 생기면
+알려드릴까요?</h1>
+      <p class="sub">${need ? '아이폰은 홈 화면에 추가한 앱에서만 알림을 받을 수 있어요. 나중에 설정에서 켤 수 있어요' : '초대장, 확정, 투표 마감, 모임 전날에만 알려드려요. 종류별로 설정에서 끌 수 있어요'}</p>
+    </div>
+  </main>
+  <div class="bottom-bar"><div class="inner stack-sm">
+    ${need ? '' : '<button class="btn primary" data-act="notifyOn">알림 켜기</button>'}
+    <button class="btn ${need ? 'primary' : 'plain'}" data-act="notifyLater">${need ? '확인' : '나중에'}</button>
+  </div></div>`;
+}
+
+function notifySection() {
+  const p = state.push;
+  const prefs = state.me.notify || {};
+  const device =
+    p === 'on' ? `<div class="list-row"><span class="grow">이 기기 알림</span><span class="sub">켜짐</span><button class="pill" style="border:none;font-size:12px;padding:6px 12px" data-act="pushOff">끄기</button></div>`
+    : p === 'denied' ? `<div class="list-row"><span class="grow">이 기기 알림</span><span class="sub">막혀 있어요</span></div>`
+    : p === 'needInstall' ? `<div class="list-row"><span class="grow">이 기기 알림</span><span class="sub">홈 화면 앱에서 켤 수 있어요</span></div>`
+    : p === 'unsupported' ? `<div class="list-row"><span class="grow">이 기기 알림</span><span class="sub">지원하지 않는 브라우저예요</span></div>`
+    : `<div class="list-row"><span class="grow">이 기기 알림</span><button class="pill blue" style="border:none;font-size:12px;padding:6px 12px" data-act="pushOn">켜기</button></div>`;
+  const rows = NOTIFY_KINDS.map(([k, label, meta]) => {
+    const on = prefs[k] !== false;
+    return `<button class="list-row" role="switch" aria-checked="${on}" data-act="notifyPref" data-k="${k}"><span class="grow stack-sm"><span>${label}</span><span class="meta">${meta}</span></span><span class="switch" aria-hidden="true"></span></button>`;
+  }).join('');
+  const hint = p === 'denied' ? '휴대폰 설정 → 알림 → 49th에서 허용해주세요' : '초대장 말고는 참석한 모임 소식만 알려드려요';
+  return `
+    <div class="stack-sm">
+      <span class="note">알림</span>
+      <div class="card">${device}${rows}</div>
+      <p class="note">${hint}</p>
+    </div>`;
 }
 
 // ─────────────────────────────────────────────
@@ -792,6 +917,7 @@ function viewSettings() {
       </div>
       <p class="note">${owner ? '방이 생기는 인원이자 확정 인원이에요' : `방장(${esc(ownerName)})만 바꿀 수 있어요`}</p>
     </div>
+    ${notifySection()}
     <div class="stack-sm">
       <span class="note">멤버</span>
       <div class="card">${state.members.map((m) => `<div class="list-row">${avatar(m.name, m.color, 30)}<span class="grow">${esc(m.name)}</span></div>`).join('')}</div>
@@ -815,6 +941,7 @@ function render() {
     : v === 'profile' || v === 'editProfile' ? viewProfile()
     : v === 'group' ? viewGroup()
     : v === 'firstPaint' ? viewFirstPaint()
+    : v === 'notify' ? viewNotify()
     : v === 'main' ? viewMain()
     : v === 'room' ? viewRoom()
     : v === 'newRoom' ? viewNewRoom()
@@ -940,7 +1067,23 @@ const actions = {
     if (error) throw error;
     await afterJoin();
   }),
-  finishOnboarding: () => { state.tab = 'home'; go('main'); },
+  finishOnboarding: async () => {
+    state.push = await pushStatus().catch(() => 'unsupported');
+    if (state.push === 'off') { go('notify'); return; }
+    state.tab = 'home'; go('main');
+  },
+  notifyOn: () => run(async () => { await enablePush(); state.tab = 'home'; go('main'); }),
+  notifyLater: () => { state.tab = 'home'; go('main'); },
+  pushOn: () => run(async () => { await enablePush(); render(); }),
+  pushOff: () => run(async () => { await disablePush(); render(); }),
+  notifyPref: (el) => run(async () => {
+    const k = el.dataset.k;
+    const next = { ...(state.me.notify || {}), [k]: (state.me.notify || {})[k] === false };
+    const prev = state.me.notify;
+    state.me.notify = next; render();
+    const { error } = await sb.from('members').update({ notify: next }).eq('id', state.me.id);
+    if (error) { state.me.notify = prev; render(); throw error; }
+  }),
 
   tab: (el) => { state.tab = el.dataset.tab; go('main'); },
   brush: (el) => { state.brush = el.dataset.slot; render(); },
@@ -1140,6 +1283,7 @@ async function boot() {
     if (state.session && (await loadMe())) {
       await loadGroupData();
       subscribe();
+      refreshPush().then(() => { if (state.tab === 'settings') render(); });
       state.tab = 'home';
       go('main');
       return;
@@ -1152,4 +1296,8 @@ async function boot() {
 }
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+// 알림을 눌러 앱으로 돌아오면 최신 내용으로
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'refresh' && state.me) loadGroupData().then(render).catch(() => {});
+});
 boot();

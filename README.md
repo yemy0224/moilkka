@@ -19,7 +19,7 @@
 1. 왼쪽 메뉴 **Authentication** → **Sign In / Providers**(화면에 따라 Providers 또는 Settings)로 가요.
 2. **Allow anonymous sign-ins**를 켜고 저장해요.
 
-### 3. (선택) 지난 방 자동 청소
+### 3. (0004를 실행했다면 건너뛰기) 지난 방 자동 청소
 
 마감이 지난 방은 이미 화면에 안 보이지만, 데이터까지 지우려면:
 
@@ -30,7 +30,17 @@
 select cron.schedule('49th-cleanup', '0 * * * *', 'select public.cleanup_rooms()');
 ```
 
-### 4. Vercel에 올리기
+### 4. 알림 설정
+
+1. Supabase 왼쪽 메뉴 **Edge Functions** → **Deploy a new function** → **Via Editor**를 눌러요.
+2. 함수 이름을 `push`로 하고, `supabase/functions/push/index.ts` 내용을 전부 붙여넣고 **Deploy**를 눌러요.
+3. 만든 함수의 **Details**(또는 Settings)에서 **Verify JWT**(Enforce JWT)를 꺼요. 데이터베이스가 따로 비밀번호를 붙여 부르기 때문에 괜찮아요.
+4. SQL Editor에서 `supabase/migrations/0004_push.sql`을 실행해요.
+5. 1분쯤 기다리면 알림 키가 자동으로 만들어져요. 그다음 앱 **설정 → 이 기기 알림 → 켜기**를 눌러요. 아이폰은 홈 화면에 추가한 앱에서만 켤 수 있어요.
+
+0004를 실행하면 1분마다 도는 예약 작업(`49th-tick`)이 생겨서, 지난 방 정리와 투표 마감도 앱을 아무도 안 열어도 제때 처리돼요. (3번 자동 청소는 안 해도 돼요)
+
+### 5. Vercel에 올리기
 
 1. vercel.com에 GitHub으로 로그인해요.
 2. **Add New → Project** → `49th-app` 저장소를 **Import**해요.
@@ -45,6 +55,7 @@ select cron.schedule('49th-cleanup', '0 * * * *', 'select public.cleanup_rooms()
 | `config.js` | Supabase 주소와 공개용 키 |
 | `manifest.webmanifest`, `sw.js`, `icons/` | 홈 화면에 설치되는 앱으로 만드는 파일 |
 | `supabase/migrations/0001_init.sql` | 테이블, 보안 규칙, 방 자동 생성 규칙 |
+| `supabase/functions/push/index.ts` | 알림을 실제로 보내는 서버 함수 |
 | `.github/workflows/keepalive.yml` | 하루 한 번 Supabase를 깨워서 잠들지 않게 해요 |
 
 ## 첫 버전에 들어간 것
@@ -59,7 +70,7 @@ select cron.schedule('49th-cleanup', '0 * * * *', 'select public.cleanup_rooms()
 
 ## 다음에 붙일 것
 
-푸시 알림, 또 갈래요, 동네 분포도, 네이버 지도 링크로 이름 자동 채우기.
+또 갈래요, 동네 분포도, 네이버 지도 링크로 이름 자동 채우기.
 
 ## 알아둘 점
 
