@@ -12,7 +12,7 @@ const sb = createClient(SUPABASE_URL, SUPABASE_KEY, {
 // ─────────────────────────────────────────────
 const COLORS = ['#DCEBFF', '#FFE8CC', '#E3F5E6', '#FCE4EC', '#EDE7F6', '#E5E5EA'];
 const COLOR_NAMES = ['하늘색', '살구색', '연두색', '분홍색', '연보라', '회색'];
-const SLOT = { L: '점심', D: '저녁' };
+const SLOT = { L: '점심', D: '저녁', B: '점심 또는 저녁' };
 const TIMES = { L: ['오전 11시', '오후 12시', '오후 1시'], D: ['오후 5시', '오후 5시 반', '오후 6시'] };
 const WD = ['일', '월', '화', '수', '목', '금', '토'];
 const ROOM_FROM = 8;   // 자동 방은 오늘로부터 8일 뒤부터
@@ -371,7 +371,7 @@ async function loadGroupData() {
   state.busySlots = {};
   if (state.groups.length > 1) {
     const { data: busy } = await sb.rpc('my_busy', { p_group: gid });
-    for (const b of busy || []) state.busySlots[`${b.day}|${b.slot}`] = b;
+    for (const b of busy || []) for (const s of b.slot === 'B' ? ['L', 'D'] : [b.slot]) state.busySlots[`${b.day}|${s}`] = b;
   }
   if (state.view === 'room' && state.roomId) await loadRoomDetail(state.roomId);
 }
@@ -809,7 +809,7 @@ function inviteCard(room) {
   const joined = joinedCount(room);
   const creator = memberById(room.created_by);
   const why = room.kind === 'auto'
-    ? '친구들이 될 수도 있다고 칠한 시간이 겹쳤어요'
+    ? (room.slot === 'B' ? '점심도 저녁도 겹쳤어요. 시간은 참석자 투표로 정해요' : '친구들이 될 수도 있다고 칠한 시간이 겹쳤어요')
     : `${esc(creator?.name || '친구')}님이 초대했어요${room.title ? ' · ' + esc(room.title) : ''}${room.time_label ? ' · ' + esc(room.time_label) : ''}`;
   const bars = Array.from({ length: need }, (_, i) => `<span class="${i < joined ? 'on' : ''}"></span>`).join('');
   return `<div class="invite">
@@ -817,7 +817,7 @@ function inviteCard(room) {
       <span class="badge-icon" style="background:var(--warn)">${ic.mail}</span>
       <span class="grow stack-sm"><b style="font-size:14px;font-weight:600">${esc(roomTitle(room))}</b><span style="font-size:12px;color:var(--quiet)">${why}</span></span>
     </div>
-    ${busyLine(room.day, room.slot)}
+    ${busyLine(room.day, room.slot === 'B' ? undefined : room.slot)}
     <div class="stack-sm">
       <div class="row" style="justify-content:space-between;font-size:12px"><b style="font-weight:600">${room.kind === 'auto' ? `${need}명 모이면 확정` : '모두 참석하면 확정'}</b><span style="color:var(--quiet)">지금 ${joined}명</span></div>
       <div class="progress" style="grid-template-columns:repeat(${need},minmax(0,1fr))">${bars}</div>
@@ -982,9 +982,11 @@ function roomVoteSections(room) {
     } else {
       html += `<section class="stack">
         <div class="stack-sm" style="padding:0 4px"><h2 class="title-sm">몇 시에 볼까요?</h2><span class="sub" style="font-size:12.5px">${voteDeadlineText(room.day)}에 정해져요</span></div>
-        <div role="radiogroup" aria-label="시간" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
-          ${d.times.map((t) => { const on = d.myTime === t.label; return `<button role="radio" aria-checked="${on}" data-act="voteTime" data-label="${esc(t.label)}" class="btn small ${on ? 'primary' : 'white'}" style="flex-direction:column;gap:0;min-height:56px"><span>${esc(t.label)}</span><span style="font-size:11px;font-weight:500;opacity:.8">${t.votes}명</span></button>`; }).join('')}
-        </div>
+        ${(room.slot === 'B' ? [['점심', d.times.slice(0, 3)], ['저녁', d.times.slice(3)]] : [[null, d.times]]).map(([label, list]) => `
+        ${label ? `<span class="note" style="padding:0 4px">${label}</span>` : ''}
+        <div role="radiogroup" aria-label="${label || '시간'}" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+          ${list.map((t) => { const on = d.myTime === t.label; return `<button role="radio" aria-checked="${on}" data-act="voteTime" data-label="${esc(t.label)}" class="btn small ${on ? 'primary' : 'white'}" style="flex-direction:column;gap:0;min-height:56px"><span>${esc(t.label)}</span><span style="font-size:11px;font-weight:500;opacity:.8">${t.votes}명</span></button>`; }).join('')}
+        </div>`).join('')}
       </section>`;
     }
   }
