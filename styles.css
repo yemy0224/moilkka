@@ -186,3 +186,14 @@ a { color: var(--accent); }
 [aria-checked="true"] > .switch { background: #34C759; }
 [aria-checked="true"] > .switch::after { transform: translateX(18px); }
 .notify-icon { width: 56px; height: 56px; border-radius: 16px; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
+
+/* 홈 내 상태 · 캘린더 칠한 친구 */
+.pill.blue.solid { background: var(--accent); color: #fff; border: none; font-size: 13px; padding: 8px 14px; min-height: 36px; }
+button.pill { border: none; }
+.paint-strip { display: flex; flex-wrap: wrap; gap: 8px 4px; }
+.paint-person { width: calc((100% - 16px) / 5); display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 52px; }
+.pp-av { position: relative; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; color: var(--ink); }
+.paint-person.not .pp-av { background: var(--card); border: 1.5px dashed #C7C7CC; color: #8E8E93; }
+.pp-check { position: absolute; right: -2px; bottom: -2px; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 2px solid var(--card); display: flex; align-items: center; justify-content: center; }
+.pp-name { font-size: 11px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.paint-person.not .pp-name { color: #8E8E93; }

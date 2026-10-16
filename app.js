@@ -81,6 +81,9 @@ const ic = {
   fork: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10M17 3c-2 0-3 2-3 5s1 4 3 4v9"/></svg>',
   heart: (on) => `<svg width="22" height="22" viewBox="0 0 24 24" fill="${on ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>`,
   pin: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+  tick: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  checkSm: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  pen: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 7l3 3"/></svg>',
   check: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#248A3D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/></svg>',
 };
 
@@ -642,14 +645,42 @@ function upcomingRow(room) {
   </button>`;
 }
 
+// 홈 맨 위: 내가 칠했는지 (방장은 친구들 칠한 수도 한 줄)
+function myPaintCard() {
+  const t = today();
+  const n = [...state.mine].filter((k) => k.slice(0, 10) >= t).length;
+  const owner = state.group.owner_id === state.session.user.id;
+  const prog = state.progress;
+  const painted = prog.filter((p) => p.painted).length;
+  const top = n
+    ? `<div class="list-row"><span class="badge-icon" style="background:var(--good-soft);color:var(--good)">${ic.tick}</span><span class="grow stack-sm" style="gap:1px"><b style="font-weight:600">앞으로 ${n}칸 칠했어요</b><span class="meta">겹치면 초대장으로 알려드려요</span></span><button class="link-btn" data-act="tab" data-tab="cal">수정</button></div>`
+    : `<div class="list-row"><span class="badge-icon" style="background:#FFF4E5;color:#C25E00">${ic.pen}</span><span class="grow stack-sm" style="gap:1px"><b style="font-weight:600">아직 안 칠했어요</b><span class="meta">될 수도 있는 점심·저녁만 칠해두면 돼요</span></span><button class="pill blue solid" data-act="tab" data-tab="cal">칠하기</button></div>`;
+  const ownerRow = owner && prog.length > 1
+    ? `<button class="list-row" data-act="tab" data-tab="cal"><span class="pill gray" style="font-size:11px;padding:2px 7px">방장</span><span class="grow" style="font-size:14px">${prog.length}명 중 <b style="font-weight:600">${painted}명</b>이 칠했어요</span>${ic.chev}</button>`
+    : '';
+  return `<div class="card">${top}${ownerRow}</div>`;
+}
+
+// 캘린더 위: 누가 칠했는지 (나는 항상 맨 앞, 어느 날인지는 안 보여요)
+function paintStrip() {
+  const prog = [...state.progress].sort((a, b) => (b.is_me ? 1 : 0) - (a.is_me ? 1 : 0));
+  const painted = prog.filter((p) => p.painted).length;
+  return `
+  <div class="card pad stack-sm" style="gap:10px">
+    <div class="row" style="justify-content:space-between;padding:0 2px"><b style="font-size:13px;font-weight:600">칠한 친구</b><span class="meta">${prog.length}명 중 ${painted}명</span></div>
+    <div class="paint-strip">${prog.map((p) => `
+      <div class="paint-person${p.painted ? '' : ' not'}">
+        <span class="pp-av" style="${p.painted ? `background:${p.color}` : ''}">${esc(p.name.slice(0, 1))}${p.painted ? `<span class="pp-check">${ic.checkSm}</span>` : ''}</span>
+        <span class="pp-name">${p.is_me ? '나' : esc(p.name)}</span>
+      </div>`).join('')}</div>
+  </div>`;
+}
+
 function viewHome() {
   const rooms = liveRooms();
   const invites = rooms.filter((r) => r.status === 'open' && ['invited', 'passed'].includes(myStatus(r)));
   const upcoming = rooms.filter((r) => myStatus(r) === 'joined');
   const fresh = invites.length === 0 && upcoming.length === 0;
-  const prog = state.progress;
-  const painted = prog.filter((p) => p.painted).length;
-
   return `
   <main class="screen">
     <div class="head">
@@ -660,14 +691,9 @@ function viewHome() {
       <div class="avatars" style="padding-bottom:6px">${state.members.slice(0, 8).map((m) => avatar(m.name, m.color, 30)).join('')}</div>
     </div>
 
+    ${myPaintCard()}
+
     ${fresh ? `
-    <section class="stack">
-      <div class="stack-sm" style="padding:0 4px"><h2 class="title-sm">친구들이 모이는 중</h2><span class="sub" style="font-size:12px">${prog.length}명 참여 · ${painted}명이 칠했어요</span></div>
-      <div class="card">
-        ${prog.map((p) => `<div class="list-row">${avatar(p.name, p.color, 30)}<span class="grow">${esc(p.name)}${p.is_me ? ' (나)' : ''}${p.is_owner ? ' · 방장' : ''}</span><span class="pill ${p.painted ? 'green' : 'orange'}">${p.painted ? '칠함' : '아직 안 칠함'}</span></div>`).join('')}
-        <div class="list-row"><span class="grow sub" style="font-size:14px">초대 번호 <b style="color:var(--ink);letter-spacing:2px">${esc(state.group.code)}</b></span><button class="pill blue" style="border:none;font-size:13px;padding:8px 14px" data-act="shareCode">공유</button></div>
-      </div>
-    </section>
     <div class="card pad row" style="gap:14px;align-items:flex-start">
       <span class="badge-icon" style="background:var(--warn)">${ic.mail}</span>
       <span class="grow stack-sm"><b style="font-weight:600">아직 초대장이 없어요</b><span class="sub" style="font-size:13px">8~14일 뒤 같은 시간대를 ${state.group.threshold}명 이상 칠하면 여기로 초대장이 와요.</span></span>
@@ -696,10 +722,11 @@ function viewCalendarTab() {
       <span class="eyebrow">될 수도 있는 시간을 가볍게 칠해요</span>
       <h1 class="title-lg">캘린더</h1>
     </div>
+    ${paintStrip()}
     ${brushSeg()}
     <div class="stack-sm">
       ${calendar()}
-      <p class="note">파란 칸(8~14일 뒤)에 ${state.group.threshold}명 이상 겹치면 방이 생겨요 · 더 가까운 날은 홈의 '새 방'으로</p>
+      <p class="note">파란 칸(8~14일 뒤)에 ${state.group.threshold}명 이상 겹치면 방이 생겨요 · 누가 어느 날을 칠했는지는 안 보여요</p>
     </div>
     ${coming.length ? `<section class="stack"><h2 class="title-sm" style="padding:0 4px">생긴 방</h2><div class="card">${coming.map((r) => `<button class="list-row" data-act="tab" data-tab="home"><span class="grow">${esc(roomTitle(r))}</span><span class="pill ${r.status === 'confirmed' ? 'green' : 'orange'}">${r.status === 'confirmed' ? '확정' : '초대 중'}</span>${ic.chev}</button>`).join('')}</div></section>` : ''}
   </main>`;
