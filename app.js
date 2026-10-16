@@ -83,6 +83,7 @@ const ic = {
   pin: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>',
   tick: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
   checkSm: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  bolt: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/></svg>',
   pen: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 7l3 3"/></svg>',
   check: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#248A3D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/></svg>',
 };
@@ -525,6 +526,45 @@ function brushSeg() {
   </div>`;
 }
 
+// 빠르게 칠하기 (내일부터 4주, 빈칸만)
+const QUICK = {
+  weekend_dinner: { label: '주말 저녁 전부', slot: 'D', dows: [0, 6] },
+  weekend_lunch: { label: '주말 점심 전부', slot: 'L', dows: [0, 6] },
+  weekday_dinner: { label: '평일 저녁 전부', slot: 'D', dows: [1, 2, 3, 4, 5] },
+};
+function quickTargets(kind) {
+  const q = QUICK[kind];
+  const out = [];
+  for (let i = 1; i <= 28; i++) {
+    const day = addDays(today(), i);
+    if (q.dows.includes(dow(day)) && !state.mine.has(`${day}|${q.slot}`)) out.push(day);
+  }
+  return out;
+}
+const futureMine = () => [...state.mine].filter((k) => k.slice(0, 10) >= today()).length;
+
+function paintTools() {
+  return `<div class="paint-tools">${brushSeg()}<button class="quick-btn" data-act="quickOpen">${ic.bolt}빠르게</button></div>`;
+}
+
+function quickSheet() {
+  if (!state.quickOpen) return '';
+  return `
+  <div class="sheet-back" data-act="quickClose"></div>
+  <div class="sheet" role="dialog" aria-label="빠르게 칠하기">
+    <div class="sheet-grip"></div>
+    <div class="row" style="justify-content:space-between;padding:0 4px"><h2 class="title-sm">빠르게 칠하기</h2><button class="link-btn" data-act="quickClose">닫기</button></div>
+    <div class="card">
+      ${Object.entries(QUICK).map(([k, q]) => {
+        const n = quickTargets(k).length;
+        return `<button class="list-row" data-act="quickPaint" data-kind="${k}" ${n ? '' : 'disabled'}><i class="dot" style="background:${q.slot === 'L' ? 'var(--lunch)' : 'var(--dinner)'}"></i><span class="grow">${q.label}</span><span class="meta">${n ? `빈칸 ${n}개` : '다 칠했어요'}</span></button>`;
+      }).join('')}
+    </div>
+    <div class="card"><button class="list-row" data-act="quickClear" style="color:var(--danger)" ${futureMine() ? '' : 'disabled'}><span class="grow">앞으로 칠한 것 전부 지우기</span><span class="meta">${futureMine()}칸</span></button></div>
+    <p class="note">내일부터 4주 안의 빈칸만 채워요. 패스했던 칸과 없어진 방의 시간대는 건너뛰어요</p>
+  </div>`;
+}
+
 function viewFirstPaint() {
   return `
   <main class="screen">
@@ -533,10 +573,11 @@ function viewFirstPaint() {
 시간을 칠해주세요</h1>
       <p class="sub">확실하지 않아도 돼요. 언제든 바꿀 수 있어요</p>
     </div>
-    ${brushSeg()}
+    ${paintTools()}
     ${calendar()}
     <p class="note">파란 칸(8~14일 뒤)에 ${state.group.threshold}명 이상 겹치면 방이 생겨요</p>
   </main>
+  ${quickSheet()}
   <div class="bottom-bar"><div class="inner">
     <button class="btn primary" data-act="finishOnboarding">완료</button>
   </div></div>`;
@@ -591,7 +632,7 @@ function tabbar() {
 
 function viewMain() {
   const body = state.tab === 'cal' ? viewCalendarTab() : state.tab === 'food' ? viewFood() : state.tab === 'settings' ? viewSettings() : viewHome();
-  return body + tabbar();
+  return body + tabbar() + (state.tab === 'cal' ? quickSheet() : '');
 }
 
 function inviteCard(room) {
@@ -722,7 +763,7 @@ function viewCalendarTab() {
       <h1 class="title-lg">캘린더</h1>
     </div>
     ${paintStrip()}
-    ${brushSeg()}
+    ${paintTools()}
     <div class="stack-sm">
       ${calendar()}
       <p class="note">파란 칸(8~14일 뒤)에 ${state.group.threshold}명 이상 겹치면 방이 생겨요 · 누가 어느 날을 칠했는지는 안 보여요</p>
@@ -1131,6 +1172,33 @@ const actions = {
 
   tab: (el) => { state.tab = el.dataset.tab; go('main'); },
   brush: (el) => { state.brush = el.dataset.slot; render(); },
+  quickOpen: () => { state.quickOpen = true; render(); },
+  quickClose: () => { state.quickOpen = false; render(); },
+  quickPaint: (el) => {
+    const q = QUICK[el.dataset.kind];
+    const n = quickTargets(el.dataset.kind).length;
+    if (!confirm(`${q.label.replace(' 전부', '')} 빈칸 ${n}개를 칠할까요?\n8~14일 뒤 칸에서 ${state.group.threshold}명 이상 겹치면 바로 방이 생기고 초대장이 가요.`)) return;
+    run(async () => {
+      const { data, error } = await sb.rpc('bulk_paint', { p_group: state.group.id, p_kind: el.dataset.kind });
+      if (error) throw error;
+      state.quickOpen = false;
+      await loadGroupData();
+      render();
+      toast(data ? `${data}칸 칠했어요${data < n ? ' (패스했던 칸·없어진 시간대는 건너뛰었어요)' : ''}` : '칠할 수 있는 빈칸이 없었어요');
+    });
+  },
+  quickClear: () => {
+    const n = futureMine();
+    if (!confirm(`앞으로 칠한 ${n}칸을 전부 지울까요?\n이미 생긴 방, 받은 초대장, 참석한 모임은 그대로예요.`)) return;
+    run(async () => {
+      const { error } = await sb.rpc('clear_my_paint', { p_group: state.group.id });
+      if (error) throw error;
+      state.quickOpen = false;
+      await loadGroupData();
+      render();
+      toast('칠한 칸을 모두 지웠어요');
+    });
+  },
   paint: (el) => run(async () => {
     const day = el.dataset.day;
     const key = `${day}|${state.brush}`;
