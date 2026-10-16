@@ -140,7 +140,7 @@ a { color: var(--accent); }
 
 /* 탭바 */
 .tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: rgba(250,250,252,0.92); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top: 0.5px solid #C6C6C8; padding: 7px 0 calc(8px + var(--safe-bottom)); }
-.tabbar .inner { max-width: 520px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.tabbar .inner { max-width: 520px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .tabbar button { min-height: 48px; border: none; background: none; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; font-weight: 500; color: var(--quiet); }
 .tabbar button[aria-current="page"] { color: var(--accent); }
 

@@ -31,6 +31,10 @@ const state = {
   roomId: null,
   onb: { role: null, code: '', peek: null, codeError: '', name: '', color: COLORS[0], groupName: '49th', threshold: 3 },
   newRoom: null,
+  places: [],
+  detail: null,          // 방 상세: 시간 투표 수, 식당 순위, 내 표
+  showOthers: false,
+  placeForm: null,
   busy: false,
   error: '',
 };
@@ -72,6 +76,9 @@ const ic = {
   x: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   plus: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
   lock: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
+  fork: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10M17 3c-2 0-3 2-3 5s1 4 3 4v9"/></svg>',
+  heart: (on) => `<svg width="22" height="22" viewBox="0 0 24 24" fill="${on ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>`,
+  pin: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>',
   check: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#248A3D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/></svg>',
 };
 
@@ -98,6 +105,10 @@ function errText(e) {
   if (/Anonymous sign-ins are disabled/i.test(m)) return 'Supabase에서 익명 로그인을 켜야 해요 (README 참고)';
   if (/room expired/.test(m)) return '응답 마감이 지난 방이에요';
   if (/only the owner/.test(m)) return '방장만 바꿀 수 있어요';
+  if (/voting closed/.test(m)) return '투표가 이미 마감됐어요';
+  if (/join first/.test(m)) return '참석한 사람만 할 수 있어요';
+  if (/only the person who added/.test(m)) return '담은 사람만 지울 수 있어요';
+  if (/places_url_check/.test(m)) return '네이버 지도 링크만 담을 수 있어요';
   if (/Failed to fetch|NetworkError/i.test(m)) return '인터넷 연결을 확인해주세요';
   return '문제가 생겼어요: ' + m;
 }
@@ -152,21 +163,36 @@ async function loadGroupData() {
   const to = addDays(from, 34);
   // 날짜가 지나 8~14일 창에 들어온 시간도 방이 생기도록 다시 확인
   await sb.rpc('recheck_rooms', { p_group: gid }).then(({ error }) => { if (error) console.warn(error); });
+  let places;
   const [g, mem, rooms, mine, counts, prog] = await Promise.all([
     sb.from('groups').select('*').eq('id', gid).single(),
     sb.from('members').select('id,name,color,user_id').eq('group_id', gid).order('created_at'),
-    sb.from('rooms').select('id,kind,title,day,slot,time_label,status,reply_deadline,created_by,room_members(member_id,status)').eq('group_id', gid).gte('day', from).order('day'),
+    sb.from('rooms').select('id,kind,title,day,slot,time_label,status,reply_deadline,created_by,place_id,finalized,tie_place_ids,tie_deadline,room_members(member_id,status)').eq('group_id', gid).gte('day', from).order('day'),
     sb.from('availability').select('day,slot').eq('member_id', state.me.id).gte('day', from),
     sb.rpc('availability_counts', { p_group: gid, p_from: from, p_to: to }),
     sb.rpc('group_progress', { p_group: gid }),
-  ]);
-  for (const r of [g, mem, rooms, mine, counts, prog]) if (r.error) throw r.error;
+    sb.rpc('place_list', { p_group: gid }),
+  ]).then((all) => { places = all[6]; return all.slice(0, 6); });
+  for (const r of [g, mem, rooms, mine, counts, prog, places]) if (r.error) throw r.error;
+  state.places = places.data;
   state.group = g.data;
   state.members = mem.data;
   state.rooms = rooms.data;
   state.mine = new Set(mine.data.map((a) => `${a.day}|${a.slot}`));
   state.counts = Object.fromEntries(counts.data.map((c) => [`${c.day}|${c.slot}`, c.others]));
   state.progress = prog.data;
+  if (state.view === 'room' && state.roomId) await loadRoomDetail(state.roomId);
+}
+
+async function loadRoomDetail(id) {
+  const [tc, rk, mt, tv] = await Promise.all([
+    sb.rpc('room_time_counts', { p_room: id }),
+    sb.rpc('room_place_ranking', { p_room: id }),
+    sb.from('time_votes').select('label').eq('room_id', id),
+    sb.from('tie_votes').select('place_id').eq('room_id', id),
+  ]);
+  for (const r of [tc, rk, mt, tv]) if (r.error) throw r.error;
+  state.detail = { id, times: tc.data, ranking: rk.data, myTime: mt.data[0]?.label, myTie: tv.data[0]?.place_id };
 }
 
 let reloadTimer = null;
@@ -185,6 +211,7 @@ function subscribe() {
   channel = sb.channel('49th-' + state.group.id)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `group_id=eq.${state.group.id}` }, softReload)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'room_members' }, softReload)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'places', filter: `group_id=eq.${state.group.id}` }, softReload)
     .subscribe();
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') softReload(); });
@@ -194,6 +221,10 @@ const myStatus = (room) => room.room_members.find((r) => r.member_id === state.m
 const joinedCount = (room) => room.room_members.filter((r) => r.status === 'joined').length;
 const needCount = (room) => (room.kind === 'auto' ? state.group.threshold : room.room_members.length);
 const roomTitle = (room) => `${longDate(room.day)} ${SLOT[room.slot]}`;
+const placeById = (id) => state.places.find((p) => p.id === id);
+const voteDeadlineText = (day) => { const { m, d } = md(addDays(day, -5)); return `${m}월 ${d}일 밤 9시`; };
+const placeMeta = (p) => [p.category, p.area].filter(Boolean).map(esc).join(' · ');
+const thumb = (p, size = 48) => { const hues = ['#E0A96D', '#D77A6A', '#7FA88E', '#9DB2C9', '#B9A27E', '#C49BBB']; const h = hues[(p.name || '').length % hues.length]; return `<span class="avatar" style="width:${size}px;height:${size}px;border-radius:${Math.round(size * 0.24)}px;background:${h};color:#fff">${ic.fork}</span>`; };
 const liveRooms = () => state.rooms.filter((r) => !(r.status === 'open' && new Date(r.reply_deadline) < new Date()));
 
 // ─────────────────────────────────────────────
@@ -427,11 +458,11 @@ function viewFirstPaint() {
 // ─────────────────────────────────────────────
 function tabbar() {
   const b = (id, label, icon) => `<button data-act="tab" data-tab="${id}" ${state.tab === id ? 'aria-current="page"' : ''}>${icon}${label}</button>`;
-  return `<nav class="tabbar" aria-label="하단 메뉴"><div class="inner">${b('home', '홈', ic.home)}${b('cal', '캘린더', ic.cal)}${b('settings', '설정', ic.gear)}</div></nav>`;
+  return `<nav class="tabbar" aria-label="하단 메뉴"><div class="inner">${b('home', '홈', ic.home)}${b('cal', '캘린더', ic.cal)}${b('food', '맛집', ic.fork)}${b('settings', '설정', ic.gear)}</div></nav>`;
 }
 
 function viewMain() {
-  const body = state.tab === 'cal' ? viewCalendarTab() : state.tab === 'settings' ? viewSettings() : viewHome();
+  const body = state.tab === 'cal' ? viewCalendarTab() : state.tab === 'food' ? viewFood() : state.tab === 'settings' ? viewSettings() : viewHome();
   return body + tabbar();
 }
 
@@ -473,9 +504,11 @@ function upcomingRow(room) {
   const pill = room.status === 'confirmed'
     ? '<span class="pill green">확정</span>'
     : `<span class="pill orange">${need - joined}명 더</span>`;
-  const meta = room.kind === 'manual'
-    ? [room.title, room.time_label].filter(Boolean).map(esc).join(' · ') || '직접 만든 방'
-    : room.status === 'confirmed' ? `${joined}명 참석` : `확정까지 ${need - joined}명`;
+  const place = placeById(room.place_id);
+  const meta = room.status !== 'confirmed'
+    ? [room.title, `확정까지 ${need - joined}명`].filter(Boolean).map(esc).join(' · ')
+    : [room.title, room.time_label || (room.kind === 'auto' ? '시간 투표 중' : ''), place ? place.name : room.tie_place_ids ? '식당 동표' : '식당 미정']
+        .filter(Boolean).map(esc).join(' · ');
   return `<button class="list-row" data-act="openRoom" data-room="${room.id}">
     <span class="datebox"><small>${m}월</small><b>${d}</b></span>
     <span class="grow stack-sm"><span class="main">${WD[dow(room.day)]}요일 ${SLOT[room.slot]} · ${joined}명</span><span class="meta">${meta}</span></span>
@@ -574,10 +607,121 @@ function viewRoom() {
       ${waiting.length ? `<div class="list-row"><span class="grow meta">아직 답 안 한 사람 ${waiting.length}명</span></div>` : ''}
       ${room.status === 'open' ? `<div class="list-row"><span class="grow meta">${deadlineText(room.reply_deadline)} · 그때까지 안 모이면 조용히 사라져요</span></div>` : ''}
     </div>
-    <p class="note">초대받은 사람만 이 방을 볼 수 있어요. 시간과 식당 정하기는 다음 업데이트에 들어가요.</p>
+    ${room.status === 'confirmed' && st === 'joined' ? roomVoteSections(room) : `<p class="note">${room.status === 'confirmed' ? '참석하면 시간과 식당 정하기에 함께할 수 있어요.' : '확정되면 참석자끼리 시간과 식당을 정해요.'}</p>`}
+    <p class="note">초대받은 사람만 이 방을 볼 수 있어요.</p>
     ${st === 'joined' ? `<button class="btn danger" data-act="leaveRoom" data-room="${room.id}">참석 취소</button>` : ''}
     ${st === 'invited' ? `<div class="row"><button class="btn primary small" data-act="respond" data-room="${room.id}" data-status="joined">참석</button><button class="btn white small" data-act="respond" data-room="${room.id}" data-status="passed">패스</button></div>` : ''}
   </main>`;
+}
+
+function roomVoteSections(room) {
+  const d = state.detail && state.detail.id === room.id ? state.detail : null;
+  if (!d) return '<p class="note">불러오는 중…</p>';
+  let html = '';
+
+  // 시간
+  if (room.kind === 'auto') {
+    if (room.finalized) {
+      html += `<section class="stack"><h2 class="title-sm" style="padding:0 4px">시간</h2><div class="card pad row"><b class="grow">${esc(room.time_label)}</b><span class="pill green">정해졌어요</span></div></section>`;
+    } else {
+      html += `<section class="stack">
+        <div class="stack-sm" style="padding:0 4px"><h2 class="title-sm">몇 시에 볼까요?</h2><span class="sub" style="font-size:12px">하나만 골라요 · ${voteDeadlineText(room.day)}에 1위로 정해져요 · 아무도 안 고르면 가운데 시간</span></div>
+        <div role="radiogroup" aria-label="시간" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+          ${d.times.map((t) => { const on = d.myTime === t.label; return `<button role="radio" aria-checked="${on}" data-act="voteTime" data-label="${esc(t.label)}" class="btn small ${on ? 'primary' : 'white'}" style="flex-direction:column;gap:0;min-height:56px"><span>${esc(t.label)}</span><span style="font-size:11px;font-weight:500;opacity:.8">${t.votes}명</span></button>`; }).join('')}
+        </div>
+      </section>`;
+    }
+  }
+
+  // 식당
+  const ranking = d.ranking;
+  const chosen = placeById(room.place_id) || ranking.find((p) => p.id === room.place_id);
+  const tieOn = room.tie_place_ids && new Date(room.tie_deadline) > new Date();
+  const placeRow = (p, right) => `<div class="list-row">${thumb(p, 44)}<span class="grow stack-sm"><span class="main">${esc(p.name)}</span><span class="meta">${placeMeta(p) || '&nbsp;'}</span></span>${right}</div>`;
+  const mapLink = (p) => p.url ? `<a class="pill blue" style="text-decoration:none" href="${esc(p.url)}" target="_blank" rel="noopener">지도</a>` : '';
+  const heartBtn = (p) => `<button class="icon-btn" style="background:none;color:${p.mine ? '#E0164A' : '#8E8E93'};flex-direction:column;gap:0;height:46px" aria-pressed="${p.mine}" aria-label="${esc(p.name)} 하트" data-act="heart" data-place="${p.id}">${ic.heart(p.mine)}<span style="font-size:11px;font-weight:600">${p.hearts}</span></button>`;
+
+  if (chosen) {
+    html += `<section class="stack"><h2 class="title-sm" style="padding:0 4px">식당</h2><div class="card">
+      ${placeRow(chosen, mapLink(chosen) + '<span class="pill green">정해졌어요</span>')}
+      <button class="list-row" data-act="togglePlaces" style="color:var(--accent)"><span class="grow">${state.showOthers ? '접기' : '다른 곳으로 바꾸기'}</span></button>
+      ${state.showOthers ? ranking.filter((p) => p.id !== chosen.id).map((p) => placeRow(p, `<button class="pill gray" style="border:none;padding:7px 11px" data-act="setPlace" data-place="${p.id}">여기로</button>`)).join('') : ''}
+    </div></section>`;
+  } else if (tieOn) {
+    const ties = room.tie_place_ids.map((id) => ranking.find((p) => p.id === id)).filter(Boolean);
+    html += `<section class="stack">
+      <div class="stack-sm" style="padding:0 4px"><h2 class="title-sm">하트가 똑같이 나왔어요</h2><span class="sub" style="font-size:12px">한 곳만 골라주세요 · ${deadlineText(room.tie_deadline)} · 누가 골랐는지는 안 보여요</span></div>
+      <div class="card">${ties.map((p) => { const on = d.myTie === p.id; return `<button class="list-row" role="radio" aria-checked="${on}" data-act="voteTie" data-place="${p.id}">${thumb(p, 44)}<span class="grow stack-sm"><span class="main">${esc(p.name)}</span><span class="meta">${placeMeta(p) || '&nbsp;'}</span></span><span style="color:${on ? '#E0164A' : '#C7C7CC'}">${ic.heart(on)}</span></button>`; }).join('')}</div>
+    </section>`;
+  } else if (!ranking.length) {
+    html += `<section class="stack"><h2 class="title-sm" style="padding:0 4px">어디서 먹을까요?</h2><div class="card pad stack-sm"><span class="sub">아직 담아둔 맛집이 없어요</span><button class="link-btn" data-act="tab" data-tab="food">맛집 담으러 가기</button></div></section>`;
+  } else {
+    const top = ranking[0];
+    const rest = ranking.slice(1);
+    html += `<section class="stack">
+      <div class="stack-sm" style="padding:0 4px"><h2 class="title-sm">어디서 먹을까요?</h2><span class="sub" style="font-size:12px">${room.kind === 'auto' ? `참석자 하트 1순위로 ${voteDeadlineText(room.day)}에 정해져요` : '1순위를 보고 참석자 누구나 정할 수 있어요'}</span></div>
+      <div class="card">
+        ${placeRow(top, (top.hearts ? '<span class="pill blue">1순위</span>' : '') + heartBtn(top))}
+        <div class="list-row" style="gap:8px">${mapLink(top)}<span class="grow"></span><button class="pill blue" style="border:none;padding:8px 14px;font-size:13px" data-act="setPlace" data-place="${top.id}">여기로 정하기</button></div>
+        ${rest.length ? `<button class="list-row" data-act="togglePlaces" style="color:var(--accent)"><span class="grow">${state.showOthers ? '접기' : `다른 후보 ${rest.length}곳`}</span></button>` : ''}
+        ${state.showOthers ? rest.map((p) => placeRow(p, heartBtn(p) + `<button class="pill gray" style="border:none;padding:7px 11px" data-act="setPlace" data-place="${p.id}">여기로</button>`)).join('') : ''}
+      </div>
+    </section>`;
+  }
+  return html;
+}
+
+// ─────────────────────────────────────────────
+// 맛집
+// ─────────────────────────────────────────────
+function viewFood() {
+  const list = state.places;
+  return `
+  <main class="screen">
+    <div class="head">
+      <div class="stack-sm" style="gap:0"><span class="eyebrow">우리가 담아둔 곳 ${list.length}</span><h1 class="title-lg">맛집</h1></div>
+      <button class="icon-btn" style="background:var(--accent);color:#fff;margin-bottom:4px" aria-label="맛집 담기" data-act="addPlaceOpen">${ic.plus}</button>
+    </div>
+    ${list.length ? `<div class="card">${list.map((p) => `<div class="list-row">
+        ${thumb(p, 48)}
+        <span class="grow stack-sm">
+          <span class="main">${esc(p.name)}</span>
+          <span class="meta">${placeMeta(p) || '&nbsp;'}</span>
+          <span class="row" style="gap:10px">${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener" style="font-size:12px;text-decoration:none">지도 보기</a>` : ''}${p.added_by_me ? `<button data-act="deletePlace" data-place="${p.id}" style="border:none;background:none;padding:0;font-size:12px;color:var(--quiet)">삭제</button>` : ''}</span>
+        </span>
+        <button class="icon-btn" style="background:none;color:${p.mine ? '#E0164A' : '#8E8E93'};flex-direction:column;gap:0;height:48px" aria-pressed="${p.mine}" aria-label="${esc(p.name)} 하트" data-act="heart" data-place="${p.id}">${ic.heart(p.mine)}<span style="font-size:11px;font-weight:600">${p.hearts}</span></button>
+      </div>`).join('')}</div>
+      <p class="note">하트가 많은 곳이 모임 방에서 1순위로 올라가요. 누가 눌렀는지는 안 보여요.</p>`
+      : `<div class="card pad stack-sm" style="align-items:flex-start"><b style="font-weight:600">아직 담아둔 맛집이 없어요</b><span class="sub">네이버 지도에서 가고 싶은 곳의 링크를 담아두세요.</span><button class="link-btn" data-act="addPlaceOpen">${ic.plus}맛집 담기</button></div>`}
+  </main>`;
+}
+
+const isNaverUrl = (u) => /^https:\/\/([a-z0-9-]+\.)*(naver\.me|naver\.com)\//i.test((u || '').trim());
+function placeFormValid() {
+  const f = state.placeForm;
+  return f.name.trim() && (!f.url.trim() || isNaverUrl(f.url));
+}
+function viewAddPlace() {
+  const f = state.placeForm;
+  const bad = f.url.trim() && !isNaverUrl(f.url);
+  return `
+  <main class="screen" style="gap:16px">
+    <div class="topbar"><button class="back" data-act="toFood">취소</button><b>맛집 담기</b><span style="width:40px"></span></div>
+    <div class="field">
+      <label for="placeUrl">네이버 지도 링크</label>
+      <div class="row"><input class="input" id="placeUrl" inputmode="url" placeholder="https://naver.me/..." value="${esc(f.url)}" style="${bad ? 'border-color:var(--danger)' : ''}"><button class="btn white small" style="width:auto;white-space:nowrap" data-act="pasteLink">붙여넣기</button></div>
+      <p class="note" id="urlNote" style="${bad ? 'color:var(--danger)' : ''}">${bad ? '네이버 지도 링크만 담을 수 있어요' : '네이버 지도 앱에서 장소 → 공유 → 링크 복사'}</p>
+    </div>
+    <div class="field"><label for="placeName">식당 이름</label><input class="input" id="placeName" maxlength="40" placeholder="예: 창가 파스타" value="${esc(f.name)}"></div>
+    <div class="row" style="gap:10px">
+      <div class="field grow"><label for="placeCat">종류 (선택)</label><input class="input" id="placeCat" maxlength="20" placeholder="예: 이탈리안" value="${esc(f.category)}"></div>
+      <div class="field grow"><label for="placeArea">동네 (선택)</label><input class="input" id="placeArea" maxlength="20" placeholder="예: 서울역" value="${esc(f.area)}"></div>
+    </div>
+    <p class="note">담으면 내 하트가 하나 들어가요.</p>
+  </main>
+  <div class="bottom-bar"><div class="inner">
+    <button class="btn primary" id="savePlace" data-act="savePlace" ${placeFormValid() ? '' : 'disabled'}>맛집 풀에 담기</button>
+  </div></div>`;
 }
 
 // ─────────────────────────────────────────────
@@ -654,6 +798,7 @@ function render() {
     : v === 'main' ? viewMain()
     : v === 'room' ? viewRoom()
     : v === 'newRoom' ? viewNewRoom()
+    : v === 'addPlace' ? viewAddPlace()
     : '<div class="loading">불러오는 중…</div>';
   app.innerHTML = html;
   if (v === 'code') setTimeout(() => document.getElementById('codeInput')?.focus(), 50);
@@ -689,6 +834,19 @@ app.addEventListener('input', (e) => {
   }
   if (t.id === 'groupInput') state.onb.groupName = t.value;
   if (t.id === 'roomTitle') state.newRoom.title = t.value;
+  if (['placeUrl', 'placeName', 'placeCat', 'placeArea'].includes(t.id)) {
+    const key = { placeUrl: 'url', placeName: 'name', placeCat: 'category', placeArea: 'area' }[t.id];
+    state.placeForm[key] = t.value;
+    const btn = document.getElementById('savePlace');
+    if (btn) btn.disabled = !placeFormValid();
+    if (t.id === 'placeUrl') {
+      const bad = t.value.trim() && !isNaverUrl(t.value);
+      t.style.borderColor = bad ? 'var(--danger)' : '';
+      const note = document.getElementById('urlNote');
+      note.style.color = bad ? 'var(--danger)' : '';
+      note.textContent = bad ? '네이버 지도 링크만 담을 수 있어요' : '네이버 지도 앱에서 장소 → 공유 → 링크 복사';
+    }
+  }
   if (t.id === 'roomDay') { state.newRoom.day = t.value; render(); }
 });
 
@@ -774,7 +932,73 @@ const actions = {
     await loadGroupData();
     render();
   }),
-  openRoom: (el) => go('room', { roomId: el.dataset.room }),
+  openRoom: (el) => {
+    state.detail = null;
+    state.showOthers = false;
+    go('room', { roomId: el.dataset.room });
+    run(async () => { await loadRoomDetail(el.dataset.room); render(); });
+  },
+  toFood: () => { state.tab = 'food'; go('main'); },
+  togglePlaces: () => { state.showOthers = !state.showOthers; render(); },
+  heart: (el) => run(async () => {
+    const { error } = await sb.rpc('toggle_heart', { p_place: el.dataset.place });
+    if (error) throw error;
+    await loadGroupData();
+    render();
+  }),
+  voteTime: (el) => run(async () => {
+    const { error } = await sb.rpc('vote_time', { p_room: state.roomId, p_label: el.dataset.label });
+    if (error) throw error;
+    await loadRoomDetail(state.roomId);
+    render();
+  }),
+  voteTie: (el) => run(async () => {
+    const { error } = await sb.rpc('vote_tie', { p_room: state.roomId, p_place: el.dataset.place });
+    if (error) throw error;
+    await loadRoomDetail(state.roomId);
+    render();
+  }),
+  setPlace: (el) => run(async () => {
+    const { error } = await sb.rpc('set_room_place', { p_room: state.roomId, p_place: el.dataset.place });
+    if (error) throw error;
+    state.showOthers = false;
+    await loadGroupData();
+    render();
+    toast('식당을 정했어요');
+  }),
+  addPlaceOpen: () => { state.placeForm = { url: '', name: '', category: '', area: '' }; go('addPlace'); },
+  pasteLink: async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      const m = text.match(/https:\/\/\S+/);
+      state.placeForm.url = m ? m[0] : text.trim();
+      // 네이버 지도 공유 문구의 첫 줄이 가게 이름인 경우가 많아서 비어 있으면 채워둬요
+      if (!state.placeForm.name) {
+        const first = text.split('\n').map((x) => x.replace(/\[.*?\]/g, '').trim()).find((x) => x && !/^https?:/.test(x));
+        if (first && first.length <= 40) state.placeForm.name = first;
+      }
+      render();
+    } catch { toast('붙여넣기가 막혀 있어요. 입력칸을 길게 눌러 붙여넣어 주세요'); }
+  },
+  savePlace: () => run(async () => {
+    const f = state.placeForm;
+    if (!placeFormValid()) return;
+    const { error } = await sb.rpc('add_place', { p_group: state.group.id, p_name: f.name.trim(), p_category: f.category, p_area: f.area, p_url: f.url.trim() });
+    if (error) throw error;
+    await loadGroupData();
+    toast('맛집 풀에 담았어요');
+    state.tab = 'food';
+    go('main');
+  }),
+  deletePlace: (el) => {
+    if (!confirm('이 맛집을 지울까요? 모두의 하트도 같이 사라져요.')) return;
+    run(async () => {
+      const { error } = await sb.rpc('delete_place', { p_place: el.dataset.place });
+      if (error) throw error;
+      await loadGroupData();
+      render();
+    });
+  },
   leaveRoom: (el) => {
     const room = state.rooms.find((r) => r.id === el.dataset.room);
     const msg = room?.status === 'confirmed'
@@ -805,7 +1029,8 @@ const actions = {
     const room = state.rooms.find((r) => r.id === el.dataset.room);
     if (!room) return;
     const names = room.room_members.filter((r) => r.status === 'joined').map((r) => memberById(r.member_id)?.name).filter(Boolean);
-    share(`[49th] ${room.title ? room.title + ' · ' : ''}${roomTitle(room)}${room.time_label ? ' ' + room.time_label : ''}\n참석: ${names.join(', ')}\n${location.origin}`);
+    const place = placeById(room.place_id);
+    share(`[49th] ${room.title ? room.title + ' · ' : ''}${roomTitle(room)}${room.time_label ? ' ' + room.time_label : ''}${place ? '\n장소: ' + place.name + (place.url ? ' ' + place.url : '') : ''}\n참석: ${names.join(', ')}\n${location.origin}`);
   },
 
   newRoom: () => {
