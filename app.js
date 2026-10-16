@@ -698,11 +698,14 @@ function busyLine(day, slot) {
 }
 
 function dayWho(day, oL, oD) {
+  const autoRoom = state.rooms.some((r) => r.kind === 'auto' && r.day === day);
   const line = (slot, n) => {
-    const ids = state.names[`${day}|${slot}`];
-    const known = (ids || []).map(memberById).filter(Boolean).map((m) => esc(m.name));
-    const who = known.length ? known.join(', ') + (n > known.length ? ` 외 ${n - known.length}명` : '') : `${n}명`;
-    return `<div class="day-who"><i class="dot" style="background:var(--${slot === 'L' ? 'lunch' : 'dinner'})"></i><b>${SLOT[slot]}</b><span>${n ? who : '아직 없어요'}</span></div>`;
+    const ids = state.names[`${day}|${slot}`] || [];
+    const known = ids.map(memberById).filter(Boolean);
+    const who = known.length ? known.map((m) => esc(m.name)).join(', ') + (n > known.length ? ` 외 ${n - known.length}명` : '') : `${n}명`;
+    const mineRoom = state.rooms.some((r) => r.kind === 'manual' && r.day === day && r.slot === slot && ['invited', 'joined'].includes(myStatus(r)));
+    const canMake = n && known.length && !autoRoom && !mineRoom;
+    return `<div class="day-who"><i class="dot" style="background:var(--${slot === 'L' ? 'lunch' : 'dinner'})"></i><b>${SLOT[slot]}</b><span class="grow">${n ? who : '아직 없어요'}</span>${canMake ? `<button class="link-btn" data-act="roomFromDay" data-day="${day}" data-slot="${slot}">방 만들기</button>` : ''}</div>`;
   };
   return `<div class="day-whos">${line('L', oL)}${line('D', oD)}</div>`;
 }
@@ -1860,6 +1863,16 @@ const actions = {
     share(`[${state.group.name}] ${room.title ? room.title + ' · ' : ''}${roomTitle(room)}${room.time_label ? ' ' + room.time_label : ''}${place ? '\n장소: ' + place.name + (place.url ? ' ' + place.url : '') : ''}\n참석: ${names.join(', ')}\n${location.origin}`);
   },
 
+  roomFromDay: (el) => {
+    const { day, slot } = el.dataset;
+    const ids = (state.names[`${day}|${slot}`] || []).filter((id) => memberById(id));
+    state.selDay = null;
+    // 날짜 창의 뒤로가기 한 칸을 새 방 화면이 그대로 씀
+    const reuse = overlayPushed;
+    overlayPushed = false;
+    const nr = { title: '', invitees: new Set(ids), day, slot, time: 1 };
+    if (reuse) go('newRoom', { newRoom: nr }, true); else go('newRoom', { newRoom: nr });
+  },
   newRoom: () => {
     state.newRoom = { title: '', invitees: new Set(), day: addDays(today(), 1), slot: 'D', time: 1 };
     go('newRoom');

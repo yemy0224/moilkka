@@ -349,4 +349,8 @@ body.in-chat { overflow: hidden; }
 .day-whos { display: flex; flex-direction: column; gap: 4px; padding: 2px 0; }
 .day-who { display: flex; align-items: center; gap: 6px; font-size: 12.5px; min-width: 0; }
 .day-who b { font-weight: 600; flex: none; }
-.day-who span { color: var(--quiet); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.day-who { align-items: flex-start; }
+.day-who > i, .day-who > b { margin-top: 2px; }
+.day-who > i { margin-top: 6px; }
+.day-who span { color: var(--quiet); line-height: 1.5; word-break: keep-all; }
+.day-who .link-btn { min-height: 24px; padding: 0; font-size: 12.5px; flex: none; }
