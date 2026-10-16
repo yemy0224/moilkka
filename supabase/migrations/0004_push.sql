@@ -20,6 +20,7 @@ create table if not exists private.settings (
   key text primary key,
   value text not null
 );
+alter table private.settings enable row level security;  -- 정책 없음 = 앱에서는 아무것도 못 읽어요
 insert into private.settings (key, value)
   values ('cron_secret', md5(random()::text || clock_timestamp()::text) || md5(random()::text))
   on conflict (key) do nothing;
