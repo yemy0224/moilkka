@@ -346,3 +346,7 @@ body.in-chat { overflow: hidden; }
 .hero-acts > * + * { border-left: 0.5px solid var(--line); }
 .hero-acts svg { width: 15px; height: 15px; }
 .hero-acts .unread { min-width: 17px; height: 17px; font-size: 10.5px; padding: 0 5px; }
+.day-whos { display: flex; flex-direction: column; gap: 4px; padding: 2px 0; }
+.day-who { display: flex; align-items: center; gap: 6px; font-size: 12.5px; min-width: 0; }
+.day-who b { font-weight: 600; flex: none; }
+.day-who span { color: var(--quiet); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

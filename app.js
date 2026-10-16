@@ -28,6 +28,7 @@ const state = {
   rooms: [],
   mine: new Set(),   // 'YYYY-MM-DD|L'
   counts: {},        // 'YYYY-MM-DD|L' -> 친구 수
+  names: {},         // 'YYYY-MM-DD|L' -> 칠한 친구 id 목록
   progress: [],
   brush: 'D',
   roomId: null,
@@ -390,6 +391,10 @@ async function loadGroupData() {
   state.mine = new Set(mine.data.map((a) => `${a.day}|${a.slot}`));
   state.counts = Object.fromEntries(counts.data.map((c) => [`${c.day}|${c.slot}`, c.others]));
   state.progress = prog.data;
+  // 그날 칠한 친구 이름 (쿼리를 아직 안 돌렸으면 숫자만)
+  const names = await sb.rpc('availability_names', { p_group: gid, p_from: from, p_to: to });
+  state.names = {};
+  for (const n of names.error ? [] : names.data) (state.names[`${n.day}|${n.slot}`] ||= []).push(n.member_id);
   const { data: unread } = await sb.rpc('room_unread', { p_group: gid });
   state.unread = Object.fromEntries((unread || []).map((u) => [u.room_id, u]));
   state.busySlots = {};
@@ -692,6 +697,16 @@ function busyLine(day, slot) {
   return `<div class="busy-line">${items.map(({ s, b }) => `${SLOT[s]}엔 <b>${esc(b.group_name)}</b> 모임이 있어요${b.time_label ? ` (${esc(b.time_label)})` : ''}`).join(' · ')}</div>`;
 }
 
+function dayWho(day, oL, oD) {
+  const line = (slot, n) => {
+    const ids = state.names[`${day}|${slot}`];
+    const known = (ids || []).map(memberById).filter(Boolean).map((m) => esc(m.name));
+    const who = known.length ? known.join(', ') + (n > known.length ? ` 외 ${n - known.length}명` : '') : `${n}명`;
+    return `<div class="day-who"><i class="dot" style="background:var(--${slot === 'L' ? 'lunch' : 'dinner'})"></i><b>${SLOT[slot]}</b><span>${n ? who : '아직 없어요'}</span></div>`;
+  };
+  return `<div class="day-whos">${line('L', oL)}${line('D', oD)}</div>`;
+}
+
 function dayPanel() {
   const day = state.selDay;
   if (!day || state.quickOpen) return '';
@@ -705,9 +720,10 @@ function dayPanel() {
   <div class="day-panel" role="dialog" aria-label="${longDate(day)} 칠하기">
     <div class="row" style="justify-content:space-between;align-items:flex-start">
       <div class="stack-sm" style="gap:1px"><b style="font-size:15px">${longDate(day)}</b>
-        <span style="font-size:11.5px;color:var(--quiet)">되는 친구 점심 ${oL}명 · 저녁 ${oD}명${inWin ? ' · 방이 생길 수 있는 날' : ''}</span></div>
+        <span style="font-size:11.5px;color:var(--quiet)">${inWin ? '방이 생길 수 있는 날' : `${diffDays(day)}일 뒤`}</span></div>
       <button class="link-btn" style="min-height:32px;padding:0;white-space:nowrap;flex:none" data-act="closeDay">닫기</button>
     </div>
+    ${dayWho(day, oL, oD)}
     ${busyLine(day)}
     <div class="day-opts">
       ${opt('L', '<i class="dot" style="background:var(--lunch)"></i>점심', l && !d)}
