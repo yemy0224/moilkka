@@ -596,8 +596,8 @@ function dayPanel() {
   return `
   <div class="day-panel" role="dialog" aria-label="${longDate(day)} 칠하기">
     <div class="row" style="justify-content:space-between;align-items:flex-start">
-      <div class="stack-sm" style="gap:1px"><b style="font-size:16px">${longDate(day)}</b>
-        <span style="font-size:12.5px;color:var(--quiet)">되는 친구 점심 ${oL}명 · 저녁 ${oD}명${inWin ? ' · 방이 생길 수 있는 날' : ''}</span></div>
+      <div class="stack-sm" style="gap:1px"><b style="font-size:15px">${longDate(day)}</b>
+        <span style="font-size:11.5px;color:var(--quiet)">되는 친구 점심 ${oL}명 · 저녁 ${oD}명${inWin ? ' · 방이 생길 수 있는 날' : ''}</span></div>
       <button class="link-btn" style="min-height:32px;padding:0;white-space:nowrap;flex:none" data-act="closeDay">닫기</button>
     </div>
     <div class="day-opts">
@@ -715,12 +715,12 @@ function inviteCard(room) {
   return `<div class="invite">
     <div class="row" style="gap:12px;align-items:flex-start">
       <span class="badge-icon" style="background:var(--warn)">${ic.mail}</span>
-      <span class="grow stack-sm"><b style="font-size:15px;font-weight:600">${esc(roomTitle(room))}</b><span style="font-size:13px;color:var(--quiet)">${why}</span></span>
+      <span class="grow stack-sm"><b style="font-size:14px;font-weight:600">${esc(roomTitle(room))}</b><span style="font-size:12px;color:var(--quiet)">${why}</span></span>
     </div>
     <div class="stack-sm">
-      <div class="row" style="justify-content:space-between;font-size:13px"><b style="font-weight:600">${room.kind === 'auto' ? `${need}명 모이면 확정` : '모두 참석하면 확정'}</b><span style="color:var(--quiet)">지금 ${joined}명</span></div>
+      <div class="row" style="justify-content:space-between;font-size:12px"><b style="font-weight:600">${room.kind === 'auto' ? `${need}명 모이면 확정` : '모두 참석하면 확정'}</b><span style="color:var(--quiet)">지금 ${joined}명</span></div>
       <div class="progress" style="grid-template-columns:repeat(${need},minmax(0,1fr))">${bars}</div>
-      <span style="font-size:12.5px;color:var(--quiet)">${deadlineText(room.reply_deadline).replace(' 마감', '')}까지 답해주세요</span>
+      <span style="font-size:11.5px;color:var(--quiet)">${deadlineText(room.reply_deadline).replace(' 마감', '')}까지 답해주세요</span>
     </div>
     <div class="row">
       <button class="btn primary small" data-act="respond" data-room="${room.id}" data-status="joined">참석</button>
@@ -756,10 +756,10 @@ function myPaintCard() {
   const prog = state.progress;
   const painted = prog.filter((p) => p.painted).length;
   const top = n
-    ? `<div class="list-row"><span class="badge-icon" style="background:var(--good-soft);color:var(--good)">${ic.tick}</span><span class="grow stack-sm" style="gap:1px"><b style="font-weight:600">앞으로 ${n}칸 칠했어요</b><span class="meta">겹치면 초대장으로 알려드려요</span></span><button class="link-btn" data-act="tab" data-tab="cal">수정</button></div>`
-    : `<div class="list-row"><span class="badge-icon" style="background:#FFF4E5;color:#C25E00">${ic.pen}</span><span class="grow stack-sm" style="gap:1px"><b style="font-weight:600">아직 안 칠했어요</b><span class="meta">될 수도 있는 점심·저녁만 칠해두면 돼요</span></span><button class="pill blue solid" data-act="tab" data-tab="cal">칠하기</button></div>`;
+    ? `<div class="list-row"><span class="badge-icon" style="background:var(--good-soft);color:var(--good)">${ic.tick}</span><span class="grow stack-sm" style="gap:1px"><b style="font-weight:600;font-size:14px">앞으로 ${n}칸 칠했어요</b><span class="meta">겹치면 초대장으로 알려드려요</span></span><button class="link-btn" data-act="tab" data-tab="cal">수정</button></div>`
+    : `<div class="list-row"><span class="badge-icon" style="background:#FFF4E5;color:#C25E00">${ic.pen}</span><span class="grow stack-sm" style="gap:1px"><b style="font-weight:600;font-size:14px">아직 안 칠했어요</b><span class="meta">될 수도 있는 점심·저녁만 칠해두면 돼요</span></span><button class="pill blue solid" data-act="tab" data-tab="cal">칠하기</button></div>`;
   const ownerRow = owner && prog.length > 1
-    ? `<button class="list-row" data-act="tab" data-tab="cal"><span class="pill gray" style="font-size:11px;padding:2px 7px">방장</span><span class="grow" style="font-size:14px">${prog.length}명 중 <b style="font-weight:600">${painted}명</b>이 칠했어요</span>${ic.chev}</button>`
+    ? `<button class="list-row" data-act="tab" data-tab="cal"><span class="pill gray" style="font-size:11px;padding:2px 7px">방장</span><span class="grow" style="font-size:13px">${prog.length}명 중 <b style="font-weight:600">${painted}명</b>이 칠했어요</span>${ic.chev}</button>`
     : '';
   return `<div class="card">${top}${ownerRow}</div>`;
 }
