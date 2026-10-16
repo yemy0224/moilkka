@@ -377,7 +377,7 @@ async function loadGroupData() {
   const [g, mem, rooms, mine, counts, prog] = await Promise.all([
     sb.from('groups').select('*').eq('id', gid).single(),
     sb.from('members').select('id,name,color,user_id').eq('group_id', gid).order('created_at'),
-    sb.from('rooms').select('id,kind,title,day,slot,time_label,status,reply_deadline,created_by,place_id,finalized,tie_place_ids,tie_deadline,room_members(member_id,status)').eq('group_id', gid).gte('day', from).order('day'),
+    sb.from('rooms').select('*,room_members(member_id,status)').eq('group_id', gid).gte('day', from).order('day'),
     sb.from('availability').select('day,slot').eq('member_id', state.me.id).gte('day', from),
     sb.rpc('availability_counts', { p_group: gid, p_from: from, p_to: to }),
     sb.rpc('group_progress', { p_group: gid }),
@@ -440,7 +440,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 const memberById = (id) => state.members.find((m) => m.id === id);
 const myStatus = (room) => room.room_members.find((r) => r.member_id === state.me.id)?.status;
 const joinedCount = (room) => room.room_members.filter((r) => r.status === 'joined').length;
-const needCount = (room) => (room.kind === 'auto' ? state.group.threshold : room.room_members.filter((x) => x.status !== 'passed').length);
+const needCount = (room) => (room.kind === 'auto' ? (room.need || state.group.threshold) : room.room_members.filter((x) => x.status !== 'passed').length);
 const roomTitle = (room) => `${longDate(room.day)} ${SLOT[room.slot]}`;
 const placeById = (id) => state.places.find((p) => p.id === id);
 const voteDeadlineText = (day) => { const { m, d } = md(addDays(day, -3)); return `${m}월 ${d}일 밤 9시`; };
@@ -1432,7 +1432,7 @@ function viewSettings() {
           ${owner ? `<div class="stepper"><button data-act="setThreshold" data-d="-1" aria-label="한 명 줄이기">−</button><span></span><button data-act="setThreshold" data-d="1" aria-label="한 명 늘리기">+</button></div>` : ic.lock}
         </div>
       </div>
-      <p class="note">${owner ? '방이 생기는 인원이자 확정 인원이에요' : `방장(${esc(ownerName)})만 바꿀 수 있어요`}</p>
+      <p class="note">${owner ? '방이 생기는 인원이자 확정 인원이에요. 바꾸면 새로 생기는 방부터 적용돼요' : `방장(${esc(ownerName)})만 바꿀 수 있어요`}</p>
     </div>
     ${notifySection()}
     <div class="stack-sm">
@@ -1825,10 +1825,10 @@ const actions = {
     let msg = '';
     if (room?.status === 'confirmed') {
       const joined = (room.room_members || []).filter((x) => x.status === 'joined').length - 1;
-      const need = room.kind === 'auto' ? state.group.threshold : 0;
+      const need = room.kind === 'auto' ? 2 : 0;
       msg = joined >= need
         ? `남은 ${joined}명의 모임은 그대로 진행돼요.`
-        : `남는 사람이 ${need}명보다 적어서 모임이 없어져요.`;
+        : '혼자 남게 돼서 모임이 없어져요.';
       if (room.kind === 'auto') msg += ' 그 칸 내 칠도 지워져요.';
     }
     if (!(await ask('참석을 취소할까요?', msg.trim(), { ok: '참석 취소', danger: true, cancel: '그대로 두기' }))) return;
