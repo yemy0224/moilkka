@@ -108,6 +108,7 @@ function errText(e) {
   if (/room expired/.test(m)) return '응답 마감이 지난 방이에요';
   if (/only the owner/.test(m)) return '방장만 바꿀 수 있어요';
   if (/voting closed/.test(m)) return '투표가 이미 마감됐어요';
+  if (/leave instead/.test(m)) return '확정된 모임은 없앨 수 없어요. 참석 취소를 눌러주세요';
   if (/join first/.test(m)) return '참석한 사람만 할 수 있어요';
   if (/only the person who added/.test(m)) return '담은 사람만 지울 수 있어요';
   if (/places_url_check/.test(m)) return '네이버 지도 링크만 담을 수 있어요';
@@ -720,7 +721,7 @@ function viewRoom() {
       <button class="back" data-act="toHome">${ic.back}홈</button>
       <div class="row">
         <button class="icon-btn" style="color:var(--accent)" aria-label="단톡방에 공유" data-act="shareRoom" data-room="${room.id}">${ic.share}</button>
-        ${st !== 'passed' ? `<button class="icon-btn" aria-label="방 없애기" data-act="deleteRoom" data-room="${room.id}">${ic.x}</button>` : ''}
+        ${st !== 'passed' && (room.status === 'open' || (room.kind === 'manual' && room.created_by === state.me.id)) ? `<button class="icon-btn" aria-label="방 없애기" data-act="deleteRoom" data-room="${room.id}">${ic.x}</button>` : ''}
       </div>
     </div>
     <div class="stack-sm" style="padding:0 4px">
@@ -1189,14 +1190,20 @@ const actions = {
   },
   leaveRoom: (el) => {
     const room = state.rooms.find((r) => r.id === el.dataset.room);
-    const msg = room?.status === 'confirmed'
-      ? '확정된 모임이라 취소하면 방이 없어지고 모두에게서 사라져요. 그 칸 내 칠도 지워져요. 취소할까요?'
-      : '참석을 취소할까요?';
+    let msg = '참석을 취소할까요?';
+    if (room?.status === 'confirmed') {
+      const joined = (room.room_members || []).filter((x) => x.status === 'joined').length - 1;
+      const need = room.kind === 'auto' ? state.group.threshold : 2;
+      msg = joined >= need
+        ? `참석을 취소할까요? 남은 ${joined}명의 모임은 그대로 진행돼요.`
+        : `참석을 취소할까요? 남는 사람이 ${need}명보다 적어서 모임이 없어져요.`;
+      if (room.kind === 'auto') msg += ' 그 칸 내 칠도 지워져요.';
+    }
     if (!confirm(msg)) return;
     run(async () => {
       const { data, error } = await sb.rpc('respond_room', { p_room: el.dataset.room, p_status: 'passed' });
       if (error) throw error;
-      toast(data === 'deleted' ? '방이 없어졌어요' : '참석을 취소했어요');
+      toast(data === 'deleted' ? '사람이 부족해서 방이 없어졌어요' : '참석을 취소했어요');
       await loadGroupData();
       state.tab = 'home';
       go('main');
