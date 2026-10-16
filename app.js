@@ -885,7 +885,7 @@ function inviteRow(room) {
   return `<div class="card list-row">
     <button class="row grow invite-open" data-act="openRoom" data-room="${room.id}">
       <span class="badge-icon" style="background:#FFF4E5;color:#C25E00">${ic.mail}</span>
-      <span class="grow stack-sm" style="gap:1px;text-align:left"><b class="main" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(room.title || shortTitle(room))}</b><span class="meta">초대장 · ${room.title ? esc(shortTitle(room)) + ' · ' : ''}${joinedCount(room)}/${needCount(room)}명</span></span>
+      <span class="grow stack-sm" style="gap:1px;text-align:left"><b class="main" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(room.title || shortTitle(room))}</b><span class="meta">초대장 · ${room.title ? esc(shortTitle(room)) + ' · ' : ''}${room.status === 'confirmed' ? `확정 · ${joinedCount(room)}명 참석` : `${joinedCount(room)}/${needCount(room)}명`}</span></span>
     </button>
     <button class="pill blue solid" data-act="respond" data-room="${room.id}" data-status="joined">참석</button>
   </div>`;
@@ -967,7 +967,7 @@ function paintStrip() {
 
 function viewHome() {
   const rooms = liveRooms();
-  const invites = rooms.filter((r) => r.status === 'open' && ['invited', 'passed'].includes(myStatus(r)));
+  const invites = rooms.filter((r) => (r.status === 'open' && myStatus(r) === 'passed') || myStatus(r) === 'invited');
   const upcoming = rooms.filter((r) => myStatus(r) === 'joined').sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
   const meetDays = new Set(upcoming.map((r) => r.day));
   const best = bestSlot();
@@ -1685,7 +1685,8 @@ const actions = {
   respond: (el) => run(async () => {
     const { data, error } = await sb.rpc('respond_room', { p_room: el.dataset.room, p_status: el.dataset.status });
     if (error) throw error;
-    if (data === 'confirmed') toast('확정됐어요!');
+    const was = state.rooms.find((r) => r.id === el.dataset.room)?.status;
+    if (data === 'confirmed') toast(was === 'confirmed' ? '참석했어요' : '확정됐어요!');
     if (data === 'deleted') { toast('방이 없어졌어요'); state.view = 'main'; }
     if (el.dataset.status === 'passed' && state.rooms.find((r) => r.id === el.dataset.room)?.kind === 'auto') toast('패스했어요. 그 칸 칠도 지웠어요');
     await loadGroupData();
