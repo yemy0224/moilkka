@@ -43,7 +43,7 @@ select cron.schedule('49th-cleanup', '0 * * * *', 'select public.cleanup_rooms()
 ### 5. 새 친구용 주소 추가 (선택)
 
 1. Vercel → 49th-app 프로젝트 → **Settings → Domains** → **Add**
-2. `moilkka.vercel.app` 입력 → 추가
+2. `moilkka-app.vercel.app` 입력 → 추가
 3. 이미 쓰고 있는 사람은 원래 주소(49th-app.vercel.app)를 계속 써요. 주소마다 로그인이 따로라서, 새 주소로 다시 설치하면 새 사람이 돼요.
 4. 앱 안의 초대 번호 공유는 `config.js`의 `PUBLIC_URL`(새 주소)로 나가요.
 
