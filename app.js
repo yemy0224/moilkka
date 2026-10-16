@@ -697,6 +697,26 @@ function viewFood() {
 }
 
 const isNaverUrl = (u) => /^https:\/\/([a-z0-9-]+\.)*(naver\.me|naver\.com)\//i.test((u || '').trim());
+// 네이버 지도 공유 문구("[네이버 지도]\n가게 이름\n주소\nhttps://naver.me/…")에서 링크와 이름을 뽑아요
+function parseShareText(text) {
+  const t = String(text || '');
+  const m = t.match(/https:\/\/[^\s<>"']+/);
+  const url = m ? m[0].replace(/[),.]+$/, '') : '';
+  const lines = t.split(/\r?\n/)
+    .map((x) => x.replace(/https:\/\/\S+/g, '').replace(/\[[^\]]*\]/g, '').trim())
+    .filter(Boolean);
+  const looksLikeAddress = (x) => /(특별시|광역시|도|시|군|구|동|읍|면|로|길)\s*\d/.test(x) || /^(서울|경기|인천|부산|대구|대전|광주|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주)\s/.test(x);
+  const name = lines.find((x) => !looksLikeAddress(x) && x.length <= 40) || '';
+  return { url, name };
+}
+function applyShareText(text) {
+  const { url, name } = parseShareText(text);
+  if (!url) return false;
+  state.placeForm.url = url;
+  if (!state.placeForm.name.trim() && name) state.placeForm.name = name;
+  return true;
+}
+
 function placeFormValid() {
   const f = state.placeForm;
   return f.name.trim() && (!f.url.trim() || isNaverUrl(f.url));
@@ -807,6 +827,15 @@ function render() {
 // ─────────────────────────────────────────────
 // 입력 처리
 // ─────────────────────────────────────────────
+app.addEventListener('paste', (e) => {
+  if (e.target.id !== 'placeUrl') return;
+  const text = e.clipboardData?.getData('text') || '';
+  if (/https:\/\//.test(text) && text.trim() !== (text.match(/https:\/\/\S+/) || [''])[0]) {
+    e.preventDefault();
+    if (applyShareText(text)) render();
+  }
+});
+
 app.addEventListener('input', (e) => {
   const t = e.target;
   if (t.id === 'codeInput') {
@@ -839,6 +868,11 @@ app.addEventListener('input', (e) => {
     state.placeForm[key] = t.value;
     const btn = document.getElementById('savePlace');
     if (btn) btn.disabled = !placeFormValid();
+    if (t.id === 'placeUrl' && /\s/.test(t.value.trim()) && /https:\/\//.test(t.value)) {
+      applyShareText(t.value);
+      render();
+      return;
+    }
     if (t.id === 'placeUrl') {
       const bad = t.value.trim() && !isNaverUrl(t.value);
       t.style.borderColor = bad ? 'var(--danger)' : '';
@@ -970,13 +1004,7 @@ const actions = {
   pasteLink: async () => {
     try {
       const text = await navigator.clipboard.readText();
-      const m = text.match(/https:\/\/\S+/);
-      state.placeForm.url = m ? m[0] : text.trim();
-      // 네이버 지도 공유 문구의 첫 줄이 가게 이름인 경우가 많아서 비어 있으면 채워둬요
-      if (!state.placeForm.name) {
-        const first = text.split('\n').map((x) => x.replace(/\[.*?\]/g, '').trim()).find((x) => x && !/^https?:/.test(x));
-        if (first && first.length <= 40) state.placeForm.name = first;
-      }
+      if (!applyShareText(text)) state.placeForm.url = text.trim();
       render();
     } catch { toast('붙여넣기가 막혀 있어요. 입력칸을 길게 눌러 붙여넣어 주세요'); }
   },
