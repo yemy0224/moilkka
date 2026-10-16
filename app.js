@@ -857,24 +857,29 @@ function heroCard(room) {
   const place = placeById(room.place_id);
   const joined = room.room_members.filter((r) => r.status === 'joined').map((r) => memberById(r.member_id)).filter(Boolean);
   const unread = state.unread[room.id]?.unread || 0;
-  const meta = room.status !== 'confirmed'
+  const sub = [room.title ? shortTitle(room) : '', room.time_label || (room.status === 'confirmed' ? '시간 미정' : '')].filter(Boolean).map(esc).join(' · ');
+  const where = room.status !== 'confirmed'
     ? `확정까지 ${needCount(room) - joinedCount(room)}명`
-    : [room.time_label || '시간 미정', place ? place.name : '식당 미정'].map(esc).join(' · ');
-  return `<div class="card hero">
-    <div class="row" style="justify-content:space-between"><span class="pill blue">다음 모임</span><button class="link-btn" data-act="newRoom">${ic.plus}새 방</button></div>
-    <button class="hero-main" data-act="openRoom" data-room="${room.id}">
-      <span class="dday"><b>${dd === 0 ? '오늘' : `D-${dd}`}</b><small>${WD[dow(room.day)]}요일</small></span>
-      <span class="grow stack-sm" style="gap:2px;min-width:0">
-        <b class="hero-title">${room.title ? esc(room.title) : `${md(room.day).m}월 ${md(room.day).d}일 ${WD[dow(room.day)]}요일 ${SLOT[room.slot]}`}</b>
-        <span class="meta">${room.title ? esc(shortTitle(room)) + ' · ' : ''}${meta}</span>
-        <span class="avatars" style="margin-top:4px">${joined.slice(0, 8).map((m) => avatar(m.name, m.color, 24)).join('')}</span>
-      </span>
-    </button>
-    <div class="hero-btns">
-      <button class="btn gray small" data-act="openChat" data-room="${room.id}">대화${unread ? `<span class="unread" style="margin-left:6px">${Math.min(unread, 99)}</span>` : ''}</button>
-      ${place?.url ? `<a class="btn gray small" href="${esc(place.url)}" target="_blank" rel="noopener">지도 보기</a>` : `<button class="btn gray small" data-act="openRoom" data-room="${room.id}">자세히</button>`}
+    : place ? esc(place.name) : '식당 미정';
+  const faces = joined.slice(0, 3).map((m) => avatar(m.name, m.color, 22)).join('') + (joined.length > 3 ? `<span class="more">+${joined.length - 3}</span>` : '');
+  return `<section class="stack-sm">
+    <div class="row" style="justify-content:space-between;padding:0 4px"><h2 class="title-sm">다음 모임</h2><button class="link-btn" style="min-height:28px;padding:0" data-act="newRoom">${ic.plus}새 방</button></div>
+    <div class="card hero2">
+      <button class="hero-main" data-act="openRoom" data-room="${room.id}">
+        <span class="dday"><b>${dd === 0 ? '오늘' : `D-${dd}`}</b><small>${WD[dow(room.day)]}</small></span>
+        <span class="grow stack-sm" style="gap:1px;min-width:0">
+          <b class="hero-title">${esc(room.title || shortTitle(room))}</b>
+          ${sub ? `<span class="hero-line">${sub}</span>` : ''}
+          <span class="hero-line">${room.status === 'confirmed' ? ic.pin : ''}<span class="ell">${where}</span></span>
+        </span>
+        <span class="avatars hero-faces">${faces}</span>
+      </button>
+      <div class="hero-acts">
+        <button data-act="openChat" data-room="${room.id}">${ic.chat}대화${unread ? `<span class="unread">${Math.min(unread, 99)}</span>` : ''}</button>
+        ${place?.url ? `<a href="${esc(place.url)}" target="_blank" rel="noopener">${ic.pin}지도</a>` : `<button data-act="openRoom" data-room="${room.id}">자세히</button>`}
+      </div>
     </div>
-  </div>`;
+  </section>`;
 }
 
 // 초대장 (한 줄)
