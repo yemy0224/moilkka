@@ -1,6 +1,6 @@
-# 49th
+# 모일까
 
-친구 일곱 명이 날짜 투표 없이 약속을 잡는 웹앱이에요. 될 수도 있는 점심·저녁을 칠해두면, 8~14일 뒤 같은 시간대에 기준 인원 이상 겹칠 때 방이 생기고 초대장이 가요.
+친구 모임이 날짜 투표 없이 약속을 잡는 웹앱이에요. 한 사람이 여러 그룹에 들어갈 수 있고, 그룹끼리는 서로 보이지 않아요. 될 수도 있는 점심·저녁을 칠해두면, 8~14일 뒤 같은 시간대에 기준 인원 이상 겹칠 때 방이 생기고 초대장이 가요.
 
 빌드 과정이 없는 정적 웹앱이에요. 파일을 그대로 올리면 돌아가요.
 
@@ -40,7 +40,14 @@ select cron.schedule('49th-cleanup', '0 * * * *', 'select public.cleanup_rooms()
 
 0004를 실행하면 1분마다 도는 예약 작업(`49th-tick`)이 생겨서, 지난 방 정리와 투표 마감도 앱을 아무도 안 열어도 제때 처리돼요. (3번 자동 청소는 안 해도 돼요)
 
-### 5. Vercel에 올리기
+### 5. 새 친구용 주소 추가 (선택)
+
+1. Vercel → 49th-app 프로젝트 → **Settings → Domains** → **Add**
+2. `moilkka.vercel.app` 입력 → 추가
+3. 이미 쓰고 있는 사람은 원래 주소(49th-app.vercel.app)를 계속 써요. 주소마다 로그인이 따로라서, 새 주소로 다시 설치하면 새 사람이 돼요.
+4. 앱 안의 초대 번호 공유는 `config.js`의 `PUBLIC_URL`(새 주소)로 나가요.
+
+### 6. Vercel에 올리기
 
 1. vercel.com에 GitHub으로 로그인해요.
 2. **Add New → Project** → `49th-app` 저장소를 **Import**해요.
@@ -55,6 +62,7 @@ select cron.schedule('49th-cleanup', '0 * * * *', 'select public.cleanup_rooms()
 | `config.js` | Supabase 주소와 공개용 키 |
 | `manifest.webmanifest`, `sw.js`, `icons/` | 홈 화면에 설치되는 앱으로 만드는 파일 |
 | `supabase/migrations/0001_init.sql` | 테이블, 보안 규칙, 방 자동 생성 규칙 |
+| `supabase/migrations/0005~0011` | 규칙 정리, 빠지기, 내보내기, 빠르게 칠하기, 맛집 종류, 직접 방 유지, 여러 그룹 |
 | `supabase/functions/push/index.ts` | 알림을 실제로 보내는 서버 함수 |
 | `.github/workflows/keepalive.yml` | 하루 한 번 Supabase를 깨워서 잠들지 않게 해요 |
 

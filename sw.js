@@ -1,6 +1,6 @@
 // 앱 화면 파일을 저장해두는 서비스 워커 (설치형 앱에 필요)
 // 화면 파일을 바꿨으면 아래 버전 숫자를 올려주세요.
-const CACHE = '49th-v17';
+const CACHE = 'moilkka-v18';
 const SHELL = ['/', '/index.html', '/styles.css', '/app.js', '/config.js', '/manifest.webmanifest', '/icons/icon-192.png'];
 
 self.addEventListener('install', (event) => {
@@ -35,7 +35,7 @@ self.addEventListener('push', (event) => {
   let d = {};
   try { d = event.data ? event.data.json() : {}; } catch { d = { body: event.data && event.data.text() }; }
   event.waitUntil(
-    self.registration.showNotification(d.title || '49th', {
+    self.registration.showNotification(d.title || '모일까', {
       body: d.body || '',
       icon: '/icons/icon-192.png',
       badge: '/icons/badge-96.png',
@@ -52,7 +52,7 @@ self.addEventListener('notificationclick', (event) => {
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
       for (const c of list) {
         if (new URL(c.url).origin === self.location.origin) {
-          c.postMessage({ type: 'refresh' });
+          c.postMessage({ type: 'open', url });
           return c.focus();
         }
       }

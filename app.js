@@ -1,5 +1,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/+esm';
-import { SUPABASE_URL, SUPABASE_KEY } from './config.js';
+import { SUPABASE_URL, SUPABASE_KEY, PUBLIC_URL } from './config.js';
+const APP_NAME = '모일까';
+const SHARE_URL = PUBLIC_URL || location.origin;
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
@@ -29,7 +31,11 @@ const state = {
   progress: [],
   brush: 'D',
   roomId: null,
-  onb: { role: null, code: '', peek: null, codeError: '', name: '', color: COLORS[0], groupName: '49th', threshold: 3 },
+  onb: { role: null, code: '', peek: null, codeError: '', name: '', color: COLORS[0], groupName: '', threshold: 3 },
+  groups: [],        // 내가 들어간 그룹들 [{id, name}]
+  adding: false,     // 다른 그룹을 추가하는 중
+  groupSheet: false,
+  busySlots: {},     // 다른 그룹에서 확정된 내 시간 'YYYY-MM-DD|L' -> {group_name, time_label}
   newRoom: null,
   places: [],
   detail: null,          // 방 상세: 시간 투표 수, 식당 순위, 내 표
@@ -83,13 +89,14 @@ const ic = {
   pin: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>',
   tick: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
   checkSm: '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  chevDown: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>',
   bolt: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/></svg>',
   more: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/></svg>',
   pen: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 7l3 3"/></svg>',
   check: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#248A3D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/></svg>',
 };
 
-const appIcon = (size) => `<div class="app-icon" style="width:${size}px;height:${size}px" aria-hidden="true"><div class="cap"><i></i><i></i></div><b style="font-size:${Math.round(size * 0.17)}px">49th</b></div>`;
+const appIcon = (size) => `<div class="app-icon" style="width:${size}px;height:${size}px" aria-hidden="true"><div class="cap"><i></i><i></i></div></div>`;
 const avatar = (name, color, size = 30) => `<span class="avatar" style="width:${size}px;height:${size}px;background:${esc(color)};font-size:${Math.round(size * 0.4)}px">${initial(name)}</span>`;
 
 // ─────────────────────────────────────────────
@@ -166,6 +173,7 @@ async function share(text) {
 
 // 뒤로가기: 하위 화면·열린 창은 기록을 남겨서 휴대폰 뒤로가기로 닫혀요 (앱이 꺼지지 않게)
 const SUB_VIEWS = ['room', 'newRoom', 'addPlace', 'editProfile'];
+const isSubView = (v, extra = {}) => SUB_VIEWS.includes(v) || ((extra.adding ?? state.adding) && ['code', 'profile', 'group'].includes(v));
 let navDepth = 0;
 let pendingBack = 0;
 let popSkip = 0;
@@ -179,7 +187,7 @@ function popNav() {
   pendingBack++;
 }
 function syncOverlayNav() {
-  const open = !!(state.selDay || state.quickOpen);
+  const open = !!(state.selDay || state.quickOpen || state.groupSheet);
   if (open && !overlayPushed) { overlayPushed = true; pushNav(); }
   else if (!open && overlayPushed) { overlayPushed = false; popNav(); }
 }
@@ -187,16 +195,16 @@ window.addEventListener('popstate', () => {
   if (popSkip) { popSkip--; return; }
   navDepth = Math.max(0, navDepth - 1);
   if (askCancel) { askCancel(true); return; }
-  if (overlayPushed) { overlayPushed = false; state.selDay = null; state.quickOpen = false; render(); return; }
-  if (SUB_VIEWS.includes(state.view)) {
-    if (state.view === 'editProfile') state.tab = 'settings';
-    go('main', {}, true);
+  if (overlayPushed) { overlayPushed = false; state.selDay = null; state.quickOpen = false; state.groupSheet = false; render(); return; }
+  if (isSubView(state.view)) {
+    if (state.view === 'editProfile' || state.adding) state.tab = 'settings';
+    go('main', { adding: false }, true);
   }
 });
 
 function go(view, extra = {}, fromPop = false) {
-  const wasSub = SUB_VIEWS.includes(state.view);
-  const isSub = SUB_VIEWS.includes(view);
+  const wasSub = isSubView(state.view);
+  const isSub = isSubView(view, extra);
   if (!fromPop) {
     if (!wasSub && isSub) pushNav();
     else if (wasSub && !isSub) popNav();
@@ -252,7 +260,7 @@ async function enablePush() {
   const perm = await Notification.requestPermission();
   if (perm !== 'granted') {
     state.push = perm === 'denied' ? 'denied' : 'off';
-    toast(perm === 'denied' ? '알림이 막혀 있어요. 휴대폰 설정에서 49th 알림을 허용해주세요' : '알림을 켜지 않았어요');
+    toast(perm === 'denied' ? `알림이 막혀 있어요. 휴대폰 설정에서 ${APP_NAME} 알림을 허용해주세요` : '알림을 켜지 않았어요');
     return false;
   }
   const { data: key, error } = await sb.rpc('push_public_key');
@@ -299,17 +307,40 @@ async function ensureSession() {
   state.session = data.session;
 }
 
-async function loadMe() {
+// 지금 보고 있는 그룹 기억 (이 기기에서만)
+const savedGroup = { get() { try { return localStorage.getItem('group'); } catch { return null; } }, set(v) { try { localStorage.setItem('group', v); } catch {} } };
+let urlGroup = new URLSearchParams(location.search).get('g');
+if (urlGroup) history.replaceState(history.state, '', '/');
+
+async function loadMe(prefer) {
   const uid = state.session?.user?.id;
   if (!uid) return false;
-  const { data, error } = await sb.from('members').select('*, groups(*)').eq('user_id', uid).limit(1);
+  const { data, error } = await sb.from('members').select('*, groups(*)').eq('user_id', uid).order('created_at');
   if (error) throw error;
-  if (!data || data.length === 0) { state.me = null; state.group = null; return false; }
-  const row = data[0];
+  const rows = (data || []).filter((r) => r.groups);
+  state.groups = rows.map((r) => ({ id: r.group_id, name: r.groups.name }));
+  if (!rows.length) { state.me = null; state.group = null; return false; }
+  const want = prefer || urlGroup || state.group?.id || savedGroup.get();
+  urlGroup = null;
+  const row = rows.find((r) => r.group_id === want) || rows[0];
   state.group = row.groups;
-  delete row.groups;
-  state.me = row;
+  const me = { ...row };
+  delete me.groups;
+  state.me = me;
+  savedGroup.set(row.group_id);
   return true;
+}
+
+// 그룹 바꾸기
+async function switchGroup(id) {
+  if (channel) { sb.removeChannel(channel); channel = null; }
+  state.group = null;
+  if (!(await loadMe(id))) { go('welcome'); return; }
+  state.selDay = null; state.quickOpen = false; state.groupSheet = false; state.detail = null;
+  await loadGroupData();
+  subscribe();
+  state.tab = 'home';
+  go('main');
 }
 
 async function loadGroupData() {
@@ -337,6 +368,11 @@ async function loadGroupData() {
   state.mine = new Set(mine.data.map((a) => `${a.day}|${a.slot}`));
   state.counts = Object.fromEntries(counts.data.map((c) => [`${c.day}|${c.slot}`, c.others]));
   state.progress = prog.data;
+  state.busySlots = {};
+  if (state.groups.length > 1) {
+    const { data: busy } = await sb.rpc('my_busy', { p_group: gid });
+    for (const b of busy || []) state.busySlots[`${b.day}|${b.slot}`] = b;
+  }
   if (state.view === 'room' && state.roomId) await loadRoomDetail(state.roomId);
 }
 
@@ -364,7 +400,7 @@ function softReload() {
 let channel = null;
 function subscribe() {
   if (channel || !state.group) return;
-  channel = sb.channel('49th-' + state.group.id)
+  channel = sb.channel('g-' + state.group.id)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `group_id=eq.${state.group.id}` }, softReload)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'room_members' }, softReload)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'places', filter: `group_id=eq.${state.group.id}` }, softReload)
@@ -424,7 +460,7 @@ function viewInstall() {
         ? step(1, '카톡에서 열었다면 Safari로 열기', '카톡 화면의 메뉴에서 "다른 브라우저로 열기"를 눌러요. 카톡 안에서는 추가가 안 돼요.')
           + step(2, '아래쪽 공유 버튼 누르기', '네모에서 화살표가 위로 나온 모양이에요')
           + step(3, '"홈 화면에 추가" 고르기', '안 보이면 목록을 아래로 내려보세요')
-          + step(4, '홈 화면의 49th 아이콘으로 열기', '이 창은 닫아도 괜찮아요')
+          + step(4, `홈 화면의 ${APP_NAME} 아이콘으로 열기`, '이 창은 닫아도 괜찮아요')
         : step(1, '카톡에서 열었다면 Chrome으로 열기', '카톡 화면의 메뉴에서 "다른 브라우저로 열기"를 눌러요.')
           + step(2, '아래 "설치하기" 누르기', '버튼이 없으면 Chrome 메뉴(⋮)에서 "홈 화면에 추가"를 눌러요')}
     </ol>
@@ -445,7 +481,7 @@ function viewWelcome() {
     <div class="stack" style="align-items:center;gap:18px">
       ${appIcon(92)}
       <div class="stack-sm">
-        <h1 class="title-lg">49th</h1>
+        <h1 class="title-lg">${APP_NAME}</h1>
         <p class="sub" style="font-size:15px;white-space:pre-line">되는 날만 칠해두면
 약속은 알아서 잡혀요</p>
       </div>
@@ -473,7 +509,7 @@ function viewCode() {
   const p = state.onb.peek;
   return `
   <main class="screen">
-    <button class="back" data-act="toWelcome">${ic.back}</button>
+    <button class="back" data-act="${state.adding ? 'cancelAdd' : 'toWelcome'}">${ic.back}</button>
     <div class="stack-sm" style="padding:0 4px">
       <h1 class="title-md">초대 번호를 입력해주세요</h1>
       <p class="sub">친구에게 받은 6자리 번호예요</p>
@@ -493,7 +529,7 @@ function codeResult() {
   if (state.onb.codeError) return `<p class="err">${esc(state.onb.codeError)}</p>`;
   if (!p) return '';
   return `<div class="card pad row" style="gap:12px">
-      <span class="avatar" style="width:44px;height:44px;border-radius:12px;background:#1C1C1E;color:#fff;font-size:13px;font-weight:700">49th</span>
+      <span class="avatar" style="width:44px;height:44px;border-radius:12px;background:#1C1C1E;color:#fff;font-size:15px;font-weight:700">${esc((p.name || '?').slice(0, 1))}</span>
       <span class="grow stack-sm"><b>${esc(p.name)}</b><span class="meta" style="font-size:12px;color:var(--quiet)">${esc(p.owner_name || '')}님이 만든 그룹 · ${p.member_count}명 참여 중</span></span>
       ${ic.check}
     </div>`;
@@ -508,10 +544,10 @@ function viewProfile() {
   const name = editing ? o.name : o.name;
   return `
   <main class="screen">
-    <button class="back" data-act="${editing ? 'toSettings' : o.role === 'host' ? 'toWelcome' : 'toCode'}">${ic.back}</button>
+    <button class="back" data-act="${editing ? 'toSettings' : o.role === 'host' ? (state.adding ? 'cancelAdd' : 'toWelcome') : 'toCode'}">${ic.back}</button>
     <div class="stack-sm" style="padding:0 4px">
-      <h1 class="title-md">${editing ? '프로필 수정' : o.role === 'host' ? '먼저 내 프로필을 만들어요' : esc(o.peek?.name || '49th') + ' 친구들에게 보일 프로필'}</h1>
-      <p class="sub">${editing ? '친구들에게 바로 반영돼요' : '설정에서 언제든 바꿀 수 있어요'}</p>
+      <h1 class="title-md">${editing ? '프로필 수정' : o.role === 'host' ? '먼저 내 프로필을 만들어요' : esc(o.peek?.name || '그룹') + ' 친구들에게 보일 프로필'}</h1>
+      <p class="sub">${editing ? '이 그룹 친구들에게 바로 반영돼요' : state.adding ? '그룹마다 이름과 색을 따로 정할 수 있어요' : '설정에서 언제든 바꿀 수 있어요'}</p>
     </div>
     <div class="stack" style="align-items:center;gap:18px">
       <span id="bigAvatar">${avatar(name, o.color, 104)}</span>
@@ -543,7 +579,7 @@ function viewGroup() {
     </div>
     <div class="field">
       <label for="groupInput">그룹 이름</label>
-      <input class="input" id="groupInput" maxlength="30" value="${esc(o.groupName)}">
+      <input class="input" id="groupInput" maxlength="30" placeholder="예: 49th, 대학 동기" value="${esc(o.groupName)}">
     </div>
     <div class="field">
       <span class="label">방이 생기는 기준</span>
@@ -586,7 +622,7 @@ function calendar(compact = false) {
       <span class="num ${dow(day) === 0 ? 'sun' : ''}">${dd === 1 ? `<span class="month">${m}월</span>` : ''}${dd}</span>
       <span class="capsule"><span class="${l ? 'l' : ''}"></span><span class="${d ? 'd' : ''}"></span></span>
       ${compact ? '' : `<span class="others"><span>${'<i class="ol"></i>'.repeat(Math.min(oL, 3))}</span><span>${'<i class="od"></i>'.repeat(Math.min(oD, 3))}</span></span>`}
-      ${room ? '<span class="room-dot"></span>' : ''}
+      ${room ? '<span class="room-dot"></span>' : state.busySlots[`${day}|L`] || state.busySlots[`${day}|D`] ? '<span class="room-dot busy"></span>' : ''}
     </${tag}>`;
   }
   return `<div class="cal ${compact ? 'mini-cal' : ''}">
@@ -623,6 +659,13 @@ function paintTools() {
 }
 
 // 날짜를 누르면 아래에서 점심·저녁 고르기
+// 다른 그룹 일정 안내 (나에게만 보여요)
+function busyLine(day, slot) {
+  const items = (slot ? [slot] : ['L', 'D']).map((s) => state.busySlots[`${day}|${s}`] && { s, b: state.busySlots[`${day}|${s}`] }).filter(Boolean);
+  if (!items.length) return '';
+  return `<div class="busy-line">${items.map(({ s, b }) => `${SLOT[s]}엔 <b>${esc(b.group_name)}</b> 모임이 있어요${b.time_label ? ` (${esc(b.time_label)})` : ''}`).join(' · ')}</div>`;
+}
+
 function dayPanel() {
   const day = state.selDay;
   if (!day || state.quickOpen) return '';
@@ -639,12 +682,30 @@ function dayPanel() {
         <span style="font-size:11.5px;color:var(--quiet)">되는 친구 점심 ${oL}명 · 저녁 ${oD}명${inWin ? ' · 방이 생길 수 있는 날' : ''}</span></div>
       <button class="link-btn" style="min-height:32px;padding:0;white-space:nowrap;flex:none" data-act="closeDay">닫기</button>
     </div>
+    ${busyLine(day)}
     <div class="day-opts">
       ${opt('L', '<i class="dot" style="background:var(--lunch)"></i>점심', l && !d)}
       ${opt('D', '<i class="dot" style="background:var(--dinner)"></i>저녁', d && !l)}
       ${opt('LD', '둘 다', l && d)}
       ${opt('', '안 돼요', !l && !d)}
     </div>
+  </div>`;
+}
+
+// 그룹 바꾸기 (그룹이 두 개 이상인 사람에게만)
+function groupSheet() {
+  if (!state.groupSheet) return '';
+  return `
+  <div class="sheet-back" data-act="groupSheetClose"></div>
+  <div class="sheet" role="dialog" aria-label="그룹 바꾸기">
+    <div class="sheet-grip"></div>
+    <div class="row" style="justify-content:space-between;padding:0 4px"><h2 class="title-sm">내 그룹</h2><button class="link-btn" data-act="groupSheetClose">닫기</button></div>
+    <div class="card">${state.groups.map((g) => `<button class="list-row" data-act="pickGroup" data-id="${g.id}" aria-pressed="${g.id === state.group.id}"><span class="grow main">${esc(g.name)}</span>${g.id === state.group.id ? `<span style="color:var(--accent)">${ic.tick}</span>` : ''}</button>`).join('')}</div>
+    <div class="card">
+      <button class="list-row" data-act="addGroupHost" style="color:var(--accent)"><span class="grow">새 그룹 만들기</span></button>
+      <button class="list-row" data-act="addGroupFriend" style="color:var(--accent)"><span class="grow">초대 번호로 들어가기</span></button>
+    </div>
+    <p class="note">그룹끼리는 서로 보이지 않아요. 친구들은 자기가 들어온 그룹만 알아요</p>
   </div>`;
 }
 
@@ -714,7 +775,7 @@ function notifySection() {
     const on = prefs[k] !== false;
     return `<button class="list-row" role="switch" aria-checked="${on}" data-act="notifyPref" data-k="${k}"><span class="grow stack-sm"><span>${label}</span><span class="meta">${meta}</span></span><span class="switch" aria-hidden="true"></span></button>`;
   }).join('');
-  const hint = p === 'denied' ? '휴대폰 설정 → 알림 → 49th에서 허용해주세요' : '초대장 말고는 참석한 모임 소식만 알려드려요';
+  const hint = p === 'denied' ? `휴대폰 설정 → 알림 → ${APP_NAME}에서 허용해주세요` : '초대장 말고는 참석한 모임 소식만 알려드려요';
   return `
     <div class="stack-sm">
       <span class="note">알림</span>
@@ -733,7 +794,7 @@ function tabbar() {
 
 function viewMain() {
   const body = state.tab === 'cal' ? viewCalendarTab() : state.tab === 'food' ? viewFood() : state.tab === 'settings' ? viewSettings() : viewHome();
-  return body + tabbar() + (state.tab === 'cal' ? quickSheet() + dayPanel() : '');
+  return body + tabbar() + (state.tab === 'cal' ? quickSheet() + dayPanel() : '') + groupSheet();
 }
 
 function inviteCard(room) {
@@ -756,6 +817,7 @@ function inviteCard(room) {
       <span class="badge-icon" style="background:var(--warn)">${ic.mail}</span>
       <span class="grow stack-sm"><b style="font-size:14px;font-weight:600">${esc(roomTitle(room))}</b><span style="font-size:12px;color:var(--quiet)">${why}</span></span>
     </div>
+    ${busyLine(room.day, room.slot)}
     <div class="stack-sm">
       <div class="row" style="justify-content:space-between;font-size:12px"><b style="font-weight:600">${room.kind === 'auto' ? `${need}명 모이면 확정` : '모두 참석하면 확정'}</b><span style="color:var(--quiet)">지금 ${joined}명</span></div>
       <div class="progress" style="grid-template-columns:repeat(${need},minmax(0,1fr))">${bars}</div>
@@ -828,7 +890,9 @@ function viewHome() {
     <div class="head">
       <div class="stack-sm" style="gap:0">
         <span class="eyebrow">${(() => { const { m, d } = md(today()); return `${m}월 ${d}일 ${WD[dow(today())]}요일`; })()}</span>
-        <h1 class="title-lg">${esc(state.group.name)}</h1>
+        ${state.groups.length > 1
+          ? `<button class="group-switch" data-act="groupSheetOpen" aria-label="그룹 바꾸기, 지금 ${esc(state.group.name)}"><span class="title-lg">${esc(state.group.name)}</span>${ic.chevDown}</button>`
+          : `<h1 class="title-lg">${esc(state.group.name)}</h1>`}
       </div>
       <div class="avatars" style="padding-bottom:6px">${state.members.slice(0, 8).map((m) => avatar(m.name, m.color, 30)).join('')}</div>
     </div>
@@ -1060,7 +1124,7 @@ function newRoomHint(n) {
   const others = state.counts[`${n.day}|${n.slot}`] || 0;
   const mine = state.mine.has(`${n.day}|${n.slot}`);
   const who = others ? `이날 ${n.slot === 'L' ? '점심' : '저녁'}을 칠한 친구 ${others}명` : `이날 ${n.slot === 'L' ? '점심' : '저녁'}을 칠한 친구는 아직 없어요`;
-  return `<div class="card"><div class="list-row"><span class="grow stack-sm"><span style="font-size:14px">${who}${mine ? ' · 나도 칠함' : ''}</span><span class="meta">응답 ${deadlineText(manualDeadline(n.day))}</span></span></div></div>`;
+  return `<div class="card"><div class="list-row"><span class="grow stack-sm"><span style="font-size:14px">${who}${mine ? ' · 나도 칠함' : ''}</span><span class="meta">응답 ${deadlineText(manualDeadline(n.day))}</span>${busyLine(n.day, n.slot)}</span></div></div>`;
 }
 
 function viewNewRoom() {
@@ -1110,6 +1174,15 @@ function viewSettings() {
       <p class="note">${owner ? '방이 생기는 인원이자 확정 인원이에요' : `방장(${esc(ownerName)})만 바꿀 수 있어요`}</p>
     </div>
     ${notifySection()}
+    <div class="stack-sm">
+      <span class="note">다른 그룹</span>
+      <div class="card">
+        ${state.groups.length > 1 ? `<button class="list-row" data-act="groupSheetOpen"><span class="grow">내 그룹 ${state.groups.length}개</span><span class="meta">${esc(state.group.name)} 보는 중</span>${ic.chev}</button>` : ''}
+        <button class="list-row" data-act="addGroupHost" style="color:var(--accent)"><span class="grow">새 그룹 만들기</span></button>
+        <button class="list-row" data-act="addGroupFriend" style="color:var(--accent)"><span class="grow">초대 번호로 다른 그룹 들어가기</span></button>
+      </div>
+      <p class="note">그룹끼리는 서로 보이지 않아요. 이름·색·알림 설정은 그룹마다 따로예요</p>
+    </div>
     <div class="stack-sm">
       <span class="note">멤버</span>
       <div class="card">${state.members.map((m) => `<div class="list-row">${avatar(m.name, m.color, 30)}<span class="grow">${esc(m.name)}${m.id === state.me.id ? ' (나)' : ''}</span>${owner && m.id !== state.me.id ? `<button class="pill" style="border:none;font-size:12px;padding:6px 12px;color:var(--danger)" data-act="kickMember" data-id="${m.id}">내보내기</button>` : ''}</div>`).join('')}</div>
@@ -1233,6 +1306,24 @@ const actions = {
   startHost: () => { state.onb.role = 'host'; go('profile'); },
   startFriend: () => { state.onb.role = 'friend'; go('code'); },
   toWelcome: () => go('welcome'),
+  addGroupHost: () => {
+    state.onb = { ...state.onb, role: 'host', code: '', peek: null, codeError: '', name: state.me.name, color: state.me.color, groupName: '', threshold: 3 };
+    state.groupSheet = false;
+    go('profile', { adding: true });
+  },
+  addGroupFriend: () => {
+    state.onb = { ...state.onb, role: 'friend', code: '', peek: null, codeError: '', name: state.me.name, color: state.me.color };
+    state.groupSheet = false;
+    go('code', { adding: true });
+  },
+  cancelAdd: () => { state.tab = 'settings'; go('main', { adding: false }); },
+  groupSheetOpen: () => { state.groupSheet = true; render(); },
+  groupSheetClose: () => { state.groupSheet = false; render(); },
+  pickGroup: (el) => {
+    state.groupSheet = false;
+    if (el.dataset.id === state.group.id) { render(); return; }
+    run(() => switchGroup(el.dataset.id));
+  },
   toCode: () => go('code'),
   toProfile: () => go('profile'),
   toHome: () => { state.tab = 'home'; go('main'); },
@@ -1250,20 +1341,22 @@ const actions = {
     if (!name) return;
     if (state.onb.role === 'host') { go('group'); return; }
     await ensureSession();
-    await sb.rpc('join_group', { p_code: state.onb.code, p_my_name: name, p_color: state.onb.color }).then(({ error }) => { if (error) throw error; });
-    await afterJoin();
+    const { data: gid, error } = await sb.rpc('join_group', { p_code: state.onb.code, p_my_name: name, p_color: state.onb.color });
+    if (error) throw error;
+    await afterJoin(gid);
   }),
   onbThreshold: (el) => { state.onb.threshold = Math.min(7, Math.max(2, state.onb.threshold + Number(el.dataset.d))); render(); },
   createGroup: () => run(async () => {
-    const gname = state.onb.groupName.trim() || '49th';
+    const gname = state.onb.groupName.trim();
+    if (!gname) { toast('그룹 이름을 적어주세요'); document.getElementById('groupInput')?.focus(); return; }
     await ensureSession();
-    const { error } = await sb.rpc('create_group', { p_group_name: gname, p_threshold: state.onb.threshold, p_my_name: state.onb.name.trim(), p_color: state.onb.color });
+    const { data: gid, error } = await sb.rpc('create_group', { p_group_name: gname, p_threshold: state.onb.threshold, p_my_name: state.onb.name.trim(), p_color: state.onb.color });
     if (error) throw error;
-    await afterJoin();
+    await afterJoin(gid);
   }),
   finishOnboarding: async () => {
     state.push = await pushStatus().catch(() => 'unsupported');
-    if (state.push === 'off') { go('notify'); return; }
+    if (state.push === 'off' && state.groups.length <= 1) { go('notify'); return; }
     state.tab = 'home'; go('main');
   },
   notifyOn: () => run(async () => { await enablePush(); state.tab = 'home'; go('main'); }),
@@ -1448,7 +1541,7 @@ const actions = {
     if (!room) return;
     const names = room.room_members.filter((r) => r.status === 'joined').map((r) => memberById(r.member_id)?.name).filter(Boolean);
     const place = placeById(room.place_id);
-    share(`[49th] ${room.title ? room.title + ' · ' : ''}${roomTitle(room)}${room.time_label ? ' ' + room.time_label : ''}${place ? '\n장소: ' + place.name + (place.url ? ' ' + place.url : '') : ''}\n참석: ${names.join(', ')}\n${location.origin}`);
+    share(`[${state.group.name}] ${room.title ? room.title + ' · ' : ''}${roomTitle(room)}${room.time_label ? ' ' + room.time_label : ''}${place ? '\n장소: ' + place.name + (place.url ? ' ' + place.url : '') : ''}\n참석: ${names.join(', ')}\n${location.origin}`);
   },
 
   newRoom: () => {
@@ -1471,7 +1564,7 @@ const actions = {
     go('main');
   }),
 
-  shareCode: () => share(`[49th] 같이 약속 잡자! 앱 열고 초대 번호 ${state.group.code} 입력해줘\n${location.origin}`),
+  shareCode: () => share(`[${APP_NAME}] ${state.group.name} 같이 약속 잡자! 앱 열고 '초대 번호를 받았어요'에 ${state.group.code} 입력해줘\n${SHARE_URL}`),
   setThreshold: (el) => run(async () => {
     const n = Math.min(7, Math.max(2, state.group.threshold + Number(el.dataset.d)));
     if (n === state.group.threshold) return;
@@ -1511,7 +1604,13 @@ const actions = {
       if (error) throw error;
       if (channel) { sb.removeChannel(channel); channel = null; }
       state.me = null; state.group = null;
-      go('welcome');
+      if (await loadMe()) {
+        await loadGroupData();
+        subscribe();
+        state.tab = 'home';
+        go('main');
+        toast('그룹에서 나왔어요');
+      } else go('welcome');
     });
   },
 };
@@ -1523,12 +1622,13 @@ app.addEventListener('click', (e) => {
   if (fn) fn(el);
 });
 
-async function afterJoin() {
-  const ok = await loadMe();
+async function afterJoin(gid) {
+  if (channel) { sb.removeChannel(channel); channel = null; }
+  const ok = await loadMe(gid);
   if (!ok) throw new Error('그룹을 불러오지 못했어요');
   await loadGroupData();
   subscribe();
-  go('firstPaint');
+  go('firstPaint', { adding: false });
 }
 
 // ─────────────────────────────────────────────
@@ -1557,6 +1657,9 @@ async function boot() {
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 // 알림을 눌러 앱으로 돌아오면 최신 내용으로
 if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => {
-  if (e.data && e.data.type === 'refresh' && state.me) loadGroupData().then(render).catch(() => {});
+  if (!e.data || !state.me) return;
+  const g = e.data.url ? new URL(e.data.url, location.origin).searchParams.get('g') : null;
+  if (g && g !== state.group?.id && state.groups.some((x) => x.id === g)) { switchGroup(g).catch(() => {}); return; }
+  loadGroupData().then(render).catch(() => {});
 });
 boot();
