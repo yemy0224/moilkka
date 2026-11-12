@@ -4,13 +4,13 @@
 
 **[앱 열어보기 →](https://moilkka-app.vercel.app)** · 모바일 웹앱 (홈 화면에 추가해서 사용)
 
-<!-- 스크린샷을 docs/screenshots/ 에 넣은 뒤 아래 주석을 풀어주세요
 <p>
-  <img src="docs/screenshots/calendar.png" width="230" alt="칠하기 캘린더">
-  <img src="docs/screenshots/invite.png" width="230" alt="자동으로 생긴 약속 방 초대장">
-  <img src="docs/screenshots/room.png" width="230" alt="약속 방에서 시간·맛집 투표">
+  <img src="docs/screenshots/home.png" width="250" alt="홈: 제일 많이 겹친 날과 자동으로 온 초대장">
+  <img src="docs/screenshots/calendar.png" width="250" alt="캘린더: 점심·저녁 칠하기">
+  <img src="docs/screenshots/places.png" width="250" alt="맛집: 모임이 함께 담아둔 식당">
 </p>
--->
+
+<sub>홈 · 캘린더 · 맛집 화면 (친구 이름은 가렸어요)</sub>
 
 ## 왜 만들었나요
 
